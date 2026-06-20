@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="18%" r="85%">
+      <stop offset="0" stop-color="#154a45"/>
+      <stop offset="0.58" stop-color="#073533"/>
+      <stop offset="1" stop-color="#001d1c"/>
+    </radialGradient>
+    <linearGradient id="pin" x1="150" x2="360" y1="105" y2="405" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a9f6bc"/>
+      <stop offset="0.58" stop-color="#64d98a"/>
+      <stop offset="1" stop-color="#40b76d"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="92" fill="url(#bg)"/>
+  <ellipse cx="256" cy="423" rx="82" ry="22" fill="#63d98b" opacity="0.32"/>
+  <path filter="url(#shadow)" fill="url(#pin)" d="M256 75c-78 0-142 62-142 138 0 101 118 228 132 242 6 7 15 7 21 0 14-14 132-141 132-242 0-76-64-138-143-138Zm0 218c-45 0-82-36-82-80s37-80 82-80 82 36 82 80-37 80-82 80Z"/>
+  <path d="M204 214l42 42 88-92" fill="none" stroke="#fffaf0" stroke-linecap="round" stroke-linejoin="round" stroke-width="42" filter="url(#shadow)"/>
+</svg>

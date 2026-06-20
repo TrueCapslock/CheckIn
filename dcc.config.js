@@ -1,0 +1,68 @@
+export default {
+  name: 'CheckIn',
+  commands: [
+    {
+      id: 'dev',
+      label: 'Dev server',
+      description: 'Start or stop the file watcher.',
+      toggle: { start: 'npm run dev' },
+      group: 'Development',
+    },
+    {
+      id: 'test',
+      label: 'Test',
+      command: 'npm test',
+      group: 'Development',
+    },
+    {
+      id: 'lint',
+      label: 'Lint',
+      command: 'npm run lint',
+      group: 'Development',
+    },
+    {
+      id: 'build',
+      label: 'Build',
+      command: 'npm run build',
+      group: 'Build',
+    },
+    {
+      id: 'typecheck',
+      label: 'Type check',
+      command: 'npm run typecheck',
+      group: 'Build',
+    },
+    {
+      id: 'bump-version',
+      label: 'Bump version',
+      description: 'Increment the project version.',
+      command: 'npm version {input} --no-git-tag-version',
+      confirm: true,
+      input: { message: 'Bump type? (patch/minor/major):', placeholder: 'patch', default: 'patch' },
+      group: 'Git',
+    },
+    {
+      id: 'commit-push',
+      label: 'Commit & push',
+      description: 'Stage all, commit with message, and push.',
+      command: 'git add -A && git commit -m "{input}" && git push',
+      confirm: true,
+      input: { message: 'Commit message:', placeholder: 'describe changes', default: '' },
+      group: 'Git',
+    },
+    {
+      id: 'deploy-staging',
+      label: 'Deploy to staging',
+      command: 'npm run deploy:staging',
+      confirm: true,
+      group: 'Deploy',
+    },
+    {
+      id: 'deploy-production',
+      label: 'Deploy to production',
+      command: 'npm run deploy:production',
+      confirm: true,
+      group: 'Deploy',
+    },
+  ],
+};

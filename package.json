@@ -1,0 +1,49 @@
+{
+  "name": "check-in",
+  "private": true,
+  "version": "0.3.59",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "dev:lan": "vite --host",
+    "dev:phone": "vite --host",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hartvig/developer-control-center": "^0.8.6",
+    "@supabase/supabase-js": "^2.107.0",
+    "mapbox-gl": "^3.24.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-map-gl": "^8.1.1",
+    "react-router-dom": "^7.17.0",
+    "react-window": "^2.2.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/mapbox-gl": "^3.4.1",
+    "@types/node": "^26.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-window": "^1.8.8",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.8"
+  }
+}
