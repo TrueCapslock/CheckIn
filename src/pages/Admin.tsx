@@ -6,6 +6,7 @@ import { useLanguage } from '../lib/language-context'
 import { getCategories } from '../lib/categories'
 import { getAllCheckIns, getPlaces, getPlace, deletePlaceInSupabase, reGeocodeUserPlaces } from '../lib/places'
 import { isValidLngLat } from '../lib/location'
+import { parsePlaceAddress } from '../lib/address'
 import type { CheckIn, Place } from '../lib/types'
 import AdminImportMap from '../components/AdminImportMap'
 import AdminAddPlace from '../components/AdminAddPlace'
@@ -310,13 +311,21 @@ export default function Admin() {
                     <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">&times;</button>
                   </div>
                   <div className="space-y-2">
-                    {recent.map((ci) => (
-                      <Link key={ci.id} to={`/places/${ci.place_id}`} onClick={() => setPopup(null)} className="block bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                        <div className="font-medium text-sm dark:text-white">{ci.user_name}</div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">{ci.place?.name || t('admin.unknown_place', lang)}</div>
-                        <div className="text-xs text-gray-400 mt-1">{new Date(ci.created_at).toLocaleString()}</div>
-                      </Link>
-                    ))}
+                    {recent.map((ci) => {
+                      const parsed = ci.place?.address ? parsePlaceAddress(ci.place.address) : null
+                      return (
+                        <Link key={ci.id} to={`/places/${ci.place_id}`} onClick={() => setPopup(null)} className="block bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                          <div className="font-medium text-sm dark:text-white">{ci.user_name}</div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">{ci.place?.name || t('admin.unknown_place', lang)}</div>
+                          {(parsed?.city || parsed?.country) && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                              📍 {[parsed?.city, parsed?.country].filter(Boolean).join(', ')}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400 mt-1">{new Date(ci.created_at).toLocaleString()}</div>
+                        </Link>
+                      )
+                    })}
                   </div>
                 </div>
               </div>

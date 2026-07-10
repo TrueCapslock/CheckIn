@@ -7,6 +7,7 @@ import { getParties, getPartyLeaderboard } from '../lib/party'
 import type { PartyLeaderboardEntry } from '../lib/party'
 import type { CheckIn, Place, Party } from '../lib/types'
 import { usePartyEnabled } from '../lib/admin'
+import { parsePlaceAddress } from '../lib/address'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 
@@ -130,6 +131,7 @@ export default function Feed() {
 
             {checkIns.map((ci) => {
               const avatar = avatarUrls[ci.user_name]
+              const parsed = ci.place?.address ? parsePlaceAddress(ci.place.address) : null
               return (
                 <Link
                   key={ci.id}
@@ -154,6 +156,11 @@ export default function Feed() {
                     <div className="text-xs text-gray-400 truncate mt-0.5">
                       {getCategoryIcon(ci.place?.type ?? '')} {ci.place?.name || 'unknown'}
                     </div>
+                    {(parsed?.city || parsed?.country) && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        📍 {[parsed?.city, parsed?.country].filter(Boolean).join(', ')}
+                      </div>
+                    )}
                   </div>
                   <div className="text-xs text-gray-400 shrink-0">
                     {new Date(ci.created_at).toLocaleDateString('en-US', {
