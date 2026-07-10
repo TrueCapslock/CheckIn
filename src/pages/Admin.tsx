@@ -4,7 +4,7 @@ import { isAdmin, getMaxCheckInDistance, setMaxCheckInDistance, isPartyEnabled, 
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 import { getCategories } from '../lib/categories'
-import { getAllCheckIns, getPlaces, getPlace, deletePlaceInSupabase, reGeocodeAllPlacesMissingRegions } from '../lib/places'
+import { getAllCheckIns, getPlaces, getPlace, deletePlaceInSupabase, reGeocodeUserPlaces } from '../lib/places'
 import { isValidLngLat } from '../lib/location'
 import type { CheckIn, Place } from '../lib/types'
 import AdminImportMap from '../components/AdminImportMap'
@@ -80,9 +80,8 @@ export default function Admin() {
   const [placeMessages, setPlaceMessages] = useState<Record<string, string>>({})
   const [placesSearch, setPlacesSearch] = useState('')
   const [placesFilter, setPlacesFilter] = useState<'all' | 'manual' | 'imported'>('manual')
-  const [regeocodeState, setRegeocodeState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [regeocodeMessage, setRegeocodeMessage] = useState('')
-  const [regeocodeProgress, setRegeocodeProgress] = useState({ done: 0, total: 0 })
+  const [regeocodeUserEmail, setRegeocodeUserEmail] = useState<string | null>(null)
+  const [regeocodeUserMessage, setRegeocodeUserMessage] = useState<Record<string, string>>({})
 
   function getPlaceSource(p: Place): 'manual' | 'geoapify' | 'osm' | 'google' {
     if (p.id.startsWith('google_')) return 'google'
@@ -159,6 +158,24 @@ export default function Admin() {
       ...prev,
       [user.email]: t('admin.recalculated_user', lang).replace('{points}', String(result?.points ?? user.points)),
     }))
+  }
+
+  async function handleReGeocodeUser(user: UserRow) {
+    setRegeocodeUserEmail(user.email)
+    setRegeocodeUserMessage((prev) => ({ ...prev, [user.email]: '' }))
+    const res = await reGeocodeUserPlaces(user.name)
+    setRegeocodeUserEmail(null)
+    if (res.total === 0) {
+      setRegeocodeUserMessage((prev) => ({ ...prev, [user.email]: t('admin.regeocode_empty', lang) }))
+    } else {
+      let msg = t('admin.regeocode_done', lang)
+        .replace('{updated}', String(res.updated))
+        .replace('{skipped}', String(res.skipped))
+      if (res.errors.length > 0) {
+        msg += ' · ' + t('admin.regeocode_errors', lang).replace('{count}', String(res.errors.length))
+      }
+      setRegeocodeUserMessage((prev) => ({ ...prev, [user.email]: msg }))
+    }
   }
 
   async function handleDeleteUser(user: UserRow) {
@@ -343,6 +360,18 @@ export default function Admin() {
                         {recalcUserMessage[u.email] && (
                           <div className={`mt-2 text-xs ${recalcUserMessage[u.email].includes('failed') || recalcUserMessage[u.email].includes('mislyktes') ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
                             {recalcUserMessage[u.email]}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => handleReGeocodeUser(u)}
+                          disabled={regeocodeUserEmail === u.email}
+                          className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 dark:disabled:bg-gray-700"
+                        >
+                          {regeocodeUserEmail === u.email ? t('admin.regeocode_running', lang) : t('admin.regeocode_btn', lang)}
+                        </button>
+                        {regeocodeUserMessage[u.email] && (
+                          <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+                            {regeocodeUserMessage[u.email]}
                           </div>
                         )}
                         <button
@@ -592,54 +621,6 @@ export default function Admin() {
                 {recalcMessage && (
                   <div className={`mt-2 text-sm ${recalcState === 'done' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {recalcMessage}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-blue-200 dark:border-blue-800 p-4">
-                <h3 className="font-semibold mb-3 dark:text-white">{t('admin.regeocode_title', lang)}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{t('admin.regeocode_desc', lang)}</p>
-                <button
-                  onClick={async () => {
-                    setRegeocodeState('running')
-                    setRegeocodeMessage('')
-                    setRegeocodeProgress({ done: 0, total: 0 })
-                    try {
-                      const res = await reGeocodeAllPlacesMissingRegions((done, total) => {
-                        setRegeocodeProgress({ done, total })
-                      })
-                      setRegeocodeState('done')
-                      setRegeocodeProgress({ done: res.total, total: res.total })
-                      if (res.total === 0) {
-                        setRegeocodeMessage(t('admin.regeocode_empty', lang))
-                      } else {
-                        let msg = t('admin.regeocode_done', lang)
-                          .replace('{updated}', String(res.updated))
-                          .replace('{skipped}', String(res.skipped))
-                        if (res.errors.length > 0) {
-                          msg += ' · ' + t('admin.regeocode_errors', lang).replace('{count}', String(res.errors.length))
-                        }
-                        setRegeocodeMessage(msg)
-                      }
-                      await loadPlaces()
-                    } catch (e) {
-                      setRegeocodeState('error')
-                      setRegeocodeMessage(t('admin.regeocode_failed', lang) + ': ' + (e as Error).message)
-                    }
-                  }}
-                  disabled={regeocodeState === 'running'}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white disabled:text-gray-500 rounded-xl font-medium text-sm transition-colors"
-                >
-                  {regeocodeState === 'running' ? t('admin.regeocode_running', lang) : t('admin.regeocode_btn', lang)}
-                </button>
-                {regeocodeState === 'running' && regeocodeProgress.total > 0 && (
-                  <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
-                    {t('admin.regeocode_progress', lang).replace('{done}', String(regeocodeProgress.done)).replace('{total}', String(regeocodeProgress.total))}
-                  </div>
-                )}
-                {regeocodeMessage && (
-                  <div className={`mt-2 text-sm ${regeocodeState === 'done' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {regeocodeMessage}
                   </div>
                 )}
               </div>

@@ -271,6 +271,71 @@ export async function reGeocodeAllPlacesMissingRegions(
   return result
 }
 
+/**
+ * Per-user variant of `reGeocodeAllPlacesMissingRegions`. Iterates only the
+ * place_ids referenced by `userName`'s check-ins so admin can fix one user's
+ * data without touching the rest of the world.
+ */
+export async function reGeocodeUserPlaces(
+  userName: string,
+  onProgress?: (done: number, total: number) => void,
+  signal?: { aborted: boolean },
+): Promise<ReGeocodeResult> {
+  const { sleepThrottle } = await import('./reverse-geocode')
+  const allCheckIns = await getAllCheckIns()
+  const userPlaceIds = Array.from(new Set(
+    allCheckIns.filter((ci) => ci.user_name === userName).map((ci) => ci.place_id),
+  ))
+  if (userPlaceIds.length === 0) {
+    return { total: 0, updated: 0, skipped: 0, errors: [] }
+  }
+
+  const targetPlaces: Place[] = []
+  for (const pid of userPlaceIds) {
+    let p = getCachedPlace(pid)
+    if (!p) {
+      try { p = await getPlace(pid) } catch { /* leave null */ }
+    }
+    if (!p || p.latitude == null || p.longitude == null) continue
+    const parsed = parsePlaceAddress(p.address)
+    if (!(parsed.city || parsed.country)) targetPlaces.push(p)
+  }
+
+  const result: ReGeocodeResult = { total: targetPlaces.length, updated: 0, skipped: 0, errors: [] }
+  for (let i = 0; i < targetPlaces.length; i++) {
+    if (signal?.aborted) break
+    const place = targetPlaces[i]
+    onProgress?.(i, targetPlaces.length)
+    try {
+      const newAddress = await composeAddressFromLngLat(place.longitude!, place.latitude!, place.name)
+      if (!newAddress) {
+        result.skipped++
+        continue
+      }
+      const updated: Place = { ...place, address: newAddress }
+      await upsertPlaceInSupabase(updated)
+      try {
+        const raw = localStorage.getItem(PLACES_LIST_CACHE_KEY)
+        if (raw) {
+          const list = JSON.parse(raw) as Place[]
+          const idx = list.findIndex((p) => p.id === place.id)
+          if (idx >= 0) {
+            list[idx] = updated
+            localStorage.setItem(PLACES_LIST_CACHE_KEY, JSON.stringify(list))
+          }
+        }
+        cachePlace(updated)
+      } catch { /* ignore */ }
+      result.updated++
+    } catch (e) {
+      result.errors.push(`${place.name || place.id}: ${(e as Error).message}`)
+    }
+    await sleepThrottle()
+  }
+  onProgress?.(targetPlaces.length, targetPlaces.length)
+  return result
+}
+
 export async function getPlace(id: string): Promise<Place | null> {
   if (hasSupabaseEnv()) {
     try {
