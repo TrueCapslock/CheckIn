@@ -23,6 +23,7 @@ import type { LeaderboardEntry } from '../lib/points'
 import type { PartyLeaderboardEntry } from '../lib/party'
 import { ACHIEVEMENTS, getUnlockedAchievements } from '../lib/achievements'
 import type { AchievementDef } from '../lib/achievements'
+import { parsePlaceAddress } from '../lib/address'
 import { supabase } from '../lib/supabase'
 import { LEVELS, getLevelFromPoints, getLevelProgress } from '../lib/levels'
 import { t } from '../lib/i18n'
@@ -225,6 +226,31 @@ export default function Profile() {
   const progressPercent = Math.min(levelProgress.progress * 100, 100)
   const earnedAchievements = ACHIEVEMENTS.filter((a) => unlockedAchievements.includes(a.id))
   const previewAchievements = earnedAchievements.slice(0, 5)
+
+  // Compute the lists of cities / counties / countries the user has visited from the
+  // already-loaded check-ins. We re-parse on every render where checkIns changes —
+  // the parser is synchronous and trivially cheap.
+  const visitedRegions = useMemo(() => {
+    const cities = new Set<string>()
+    const counties = new Set<string>()
+    const countries = new Set<string>()
+    for (const ci of checkIns) {
+      const addr = ci.place?.address
+      if (!addr) continue
+      const r = parsePlaceAddress(addr)
+      if (r.city) cities.add(r.city)
+      if (r.county) counties.add(r.county)
+      if (r.country) countries.add(r.country)
+    }
+    const sort = (arr: string[]) => arr.sort((a, b) => a.localeCompare(b))
+    return { cities: sort(Array.from(cities)), counties: sort(Array.from(counties)), countries: sort(Array.from(countries)) }
+  }, [checkIns])
+
+  const isRegionAchievement = (id: string) => id === 'first_city' || id.startsWith('city_') || id === 'first_county' || id.startsWith('county_')
+  const showRegionDetails =
+    !!selectedAchievement &&
+    isRegionAchievement(selectedAchievement.id) &&
+    (visitedRegions.cities.length > 0 || visitedRegions.counties.length > 0 || visitedRegions.countries.length > 0)
 
   return (
     <div className="min-h-full bg-[var(--ci-bg)] text-[var(--ci-text)] pb-24">
@@ -522,13 +548,61 @@ export default function Profile() {
             onClick={() => setSelectedAchievement(null)}
           >
             <div
-              className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-xs text-center shadow-xl"
+              className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-xs sm:max-w-sm text-center shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-5xl mb-3">{selectedAchievement.icon}</div>
               <h3 className="text-lg font-bold mb-1 dark:text-white">{selectedAchievement.title}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{selectedAchievement.description}</p>
               <div className="text-yellow-700 dark:text-yellow-400 font-semibold text-lg mb-4">🪙+{selectedAchievement.coins}</div>
+
+              {showRegionDetails && (
+                <div className="text-left mb-4 space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+                  {visitedRegions.cities.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+                        {t('profile.cities_visited', lang).replace('{count}', String(visitedRegions.cities.length))}
+                      </p>
+                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
+                        {visitedRegions.cities.map((c) => (
+                          <span key={c} className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {visitedRegions.counties.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+                        {t('profile.counties_visited', lang).replace('{count}', String(visitedRegions.counties.length))}
+                      </p>
+                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
+                        {visitedRegions.counties.map((c) => (
+                          <span key={c} className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {visitedRegions.countries.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+                        {t('profile.countries_visited', lang).replace('{count}', String(visitedRegions.countries.length))}
+                      </p>
+                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
+                        {visitedRegions.countries.map((c) => (
+                          <span key={c} className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={() => setSelectedAchievement(null)}
                 className="w-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-2.5 rounded-xl font-medium"

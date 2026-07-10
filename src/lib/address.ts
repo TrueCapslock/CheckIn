@@ -13,7 +13,13 @@
  * like POI" tokens that aren't actually administrative levels.
  */
 
-export function parsePlaceAddress(address: string | null | undefined): { city?: string; county?: string } {
+export interface ParsedAddress {
+  city?: string
+  county?: string
+  country?: string
+}
+
+export function parsePlaceAddress(address: string | null | undefined): ParsedAddress {
   if (!address || typeof address !== 'string') return {}
   let parts = address.split(',').map((s) => s.trim()).filter(Boolean)
   if (parts.length === 0) return {}
@@ -30,10 +36,15 @@ export function parsePlaceAddress(address: string | null | undefined): { city?: 
   //    first Oslo is the city/municipality level and the second is the county level).
   //    Keeping the duplicate gives us n=2 and the second position resolves to county.
   const admins: string[] = []
+  let country: string | undefined
 
   for (const raw of parts) {
     const lo = raw.toLowerCase()
-    if (COUNTRY_HINTS.has(lo)) continue
+    if (lo in COUNTRY_MAP) {
+      // Canonicalise so "U.S.A." and "USA" don't fracture the user's list/counts.
+      if (country === undefined) country = COUNTRY_MAP[lo]
+      continue
+    }
     if (SUB_COUNTRY_REGIONS.has(lo)) continue
     if (/^[A-Za-z]{1,3}$/.test(raw)) continue        // state abbrev like NY
     if (/^\d/.test(raw) && !/\s/.test(raw)) continue // bare postcode like 10118
@@ -47,7 +58,7 @@ export function parsePlaceAddress(address: string | null | undefined): { city?: 
     admins.push(piece)
   }
 
-  if (admins.length === 0) return {}
+  if (admins.length === 0) return { country }
 
   // 2. Keyword-first: anything tagged CITY_RE / COUNTY_RE wins outright.
   const taggedCity = admins.find((p) => CITY_RE.test(p))
@@ -59,25 +70,25 @@ export function parsePlaceAddress(address: string | null | undefined): { city?: 
   //    shallowest (county/region/state).
   const n = admins.length
   let city = taggedCity
-  let county = taggedCounty
+  let county2 = taggedCounty
 
   if (!city) {
     // n >= 1: the leftmost admin item is always the city tier.
     city = admins[0]
   }
-  if (!county) {
+  if (!county2) {
     if (n === 1) {
       // Only one admin tier known — leave county undefined so we don't double-count
       // city == county for an Oslo-style address would have already produced n=2.
-      county = undefined
+      county2 = undefined
     } else if (n === 2) {
-      county = admins[1]
+      county2 = admins[1]
     } else {
-      county = admins[1]
+      county2 = admins[1]
     }
   }
 
-  return { city, county }
+  return { city, county: county2, country }
 }
 
 /* ───── helpers ───── */
@@ -107,23 +118,92 @@ function isVenueLike(p: string): boolean {
 const COUNTY_RE = /(county|kommune|shire|council|region|province|department|prefecture|oblast|governorate|landskap|fylke|parish|municipality|borough)\b/i
 const CITY_RE = /(city|town|village|hamlet|borough|municipality|parish|by|stad|stadt|bourg)\b/i
 
-// Major countries (full names + common abbreviations). Anything matching is treated
-// as the last token of the address and dropped.
-const COUNTRY_HINTS = new Set([
-  'united states', 'usa', 'u.s.a.', 'us', 'america',
-  'united kingdom', 'uk', 'great britain', 'gb',
-  'norway', 'sweden', 'denmark', 'den', 'finland', 'iceland',
-  'germany', 'germany', 'de', 'france', 'spain', 'italy', 'portugal', 'ireland', 'netherlands', 'holland',
-  'belgium', 'austria', 'switzerland', 'poland', 'czechia', 'czech republic', 'slovakia',
-  'hungary', 'romania', 'bulgaria', 'greece', 'turkey', 'russia',
-  'china', 'japan', 'korea', 'south korea', 'north korea', 'taiwan',
-  'canada', 'mexico', 'brazil', 'argentina', 'chile', 'colombia', 'peru', 'venezuela',
-  'australia', 'new zealand', 'indonesia', 'thailand', 'vietnam', 'malaysia',
-  'india', 'pakistan', 'bangladesh', 'nepal', 'sri lanka', 'philippines', 'singapore',
-  'egypt', 'morocco', 'south africa', 'kenya', 'nigeria', 'ghana',
-  'united arab emirates', 'uae', 'saudi arabia', 'israel', 'iran', 'iraq',
-  'hong kong', 'macao', 'macau',
-])
+// Map from lower-cased country token (or abbreviation / alternate spelling) to the
+// canonical English name we store / display. Anything matching a key here is treated
+// as a country token and stripped from the admins list — the canonical name is kept
+// separately so we can list "Countries visited" without fracturing the user list
+// (e.g. so "USA" and "United States" collapse to one entry).
+const COUNTRY_MAP: Record<string, string> = {
+  'united states': 'United States',
+  'usa': 'United States',
+  'u.s.a.': 'United States',
+  'us': 'United States',
+  'america': 'United States',
+  'united kingdom': 'United Kingdom',
+  'uk': 'United Kingdom',
+  'great britain': 'United Kingdom',
+  'gb': 'United Kingdom',
+  'norway': 'Norway',
+  'sweden': 'Sweden',
+  'denmark': 'Denmark',
+  'den': 'Denmark',
+  'finland': 'Finland',
+  'iceland': 'Iceland',
+  'germany': 'Germany',
+  'de': 'Germany',
+  'france': 'France',
+  'spain': 'Spain',
+  'italy': 'Italy',
+  'portugal': 'Portugal',
+  'ireland': 'Ireland',
+  'netherlands': 'Netherlands',
+  'holland': 'Netherlands',
+  'belgium': 'Belgium',
+  'austria': 'Austria',
+  'switzerland': 'Switzerland',
+  'poland': 'Poland',
+  'czechia': 'Czechia',
+  'czech republic': 'Czechia',
+  'slovakia': 'Slovakia',
+  'hungary': 'Hungary',
+  'romania': 'Romania',
+  'bulgaria': 'Bulgaria',
+  'greece': 'Greece',
+  'turkey': 'Turkey',
+  'russia': 'Russia',
+  'china': 'China',
+  'japan': 'Japan',
+  'korea': 'South Korea',
+  'south korea': 'South Korea',
+  'north korea': 'North Korea',
+  'taiwan': 'Taiwan',
+  'canada': 'Canada',
+  'mexico': 'Mexico',
+  'brazil': 'Brazil',
+  'argentina': 'Argentina',
+  'chile': 'Chile',
+  'colombia': 'Colombia',
+  'peru': 'Peru',
+  'venezuela': 'Venezuela',
+  'australia': 'Australia',
+  'new zealand': 'New Zealand',
+  'indonesia': 'Indonesia',
+  'thailand': 'Thailand',
+  'vietnam': 'Vietnam',
+  'malaysia': 'Malaysia',
+  'india': 'India',
+  'pakistan': 'Pakistan',
+  'bangladesh': 'Bangladesh',
+  'nepal': 'Nepal',
+  'sri lanka': 'Sri Lanka',
+  'philippines': 'Philippines',
+  'singapore': 'Singapore',
+  'egypt': 'Egypt',
+  'morocco': 'Morocco',
+  'south africa': 'South Africa',
+  'kenya': 'Kenya',
+  'nigeria': 'Nigeria',
+  'ghana': 'Ghana',
+  'united arab emirates': 'United Arab Emirates',
+  'uae': 'United Arab Emirates',
+  'saudi arabia': 'Saudi Arabia',
+  'israel': 'Israel',
+  'iran': 'Iran',
+  'iraq': 'Iraq',
+  'hong kong': 'Hong Kong',
+  'macao': 'Macao',
+  'macau': 'Macao',
+}
 
 // Sub-country admin regions that appear between county and country in UK / a few others.
 // We treat them like countries and drop them so they don't get mis-classified as counties.
