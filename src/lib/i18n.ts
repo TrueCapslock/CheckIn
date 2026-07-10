@@ -346,6 +346,8 @@ const translations: Translations = {
     'error_boundary.title': 'Something went wrong',
     'error_boundary.message': 'An unexpected error occurred.',
     'error_boundary.reload': 'Reload',
+    'error_boundary.show_details': 'Show details',
+    'error_boundary.hide_details': 'Hide details',
 
     'pull_to_refresh.release': 'Release to refresh ↑',
     'pull_to_refresh.pull': 'Pull to refresh ↓',
@@ -714,6 +716,8 @@ const translations: Translations = {
     'error_boundary.title': 'Noe gikk galt',
     'error_boundary.message': 'En uventet feil oppstod.',
     'error_boundary.reload': 'Last på nytt',
+    'error_boundary.show_details': 'Vis detaljer',
+    'error_boundary.hide_details': 'Skjul detaljer',
 
     'pull_to_refresh.release': 'Slipp for å oppdatere ↑',
     'pull_to_refresh.pull': 'Dra for å oppdatere ↓',
