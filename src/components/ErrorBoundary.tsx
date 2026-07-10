@@ -19,6 +19,20 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true }
   }
 
+  // Clears PWA / Service Worker caches and unregisters SWs before reloading,
+  // so a stale cached bundle (with a removed export or stale ref) can't
+  // re-throw immediately and trap the user in a retry loop. Mirrors the
+  // cache-busting pattern in App.tsx SplashScreen.handleReload.
+  handleReload = () => {
+    if ('caches' in window) {
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()))
+    }
+    window.location.reload()
+  }
+
   render() {
     if (this.state.hasError) {
       const lang = this.context.lang
@@ -28,7 +42,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <h1 className="text-lg font-bold mb-1">{t('error_boundary.title', lang)}</h1>
           <p className="text-gray-500 text-sm mb-4">{t('error_boundary.message', lang)}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={this.handleReload}
             className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium"
           >
             {t('error_boundary.reload', lang)}
