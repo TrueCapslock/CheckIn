@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { isAdmin, getMaxCheckInDistance, setMaxCheckInDistance, isPartyEnabled, setPartyEnabled, recalculateStats, syncConfig, resetApp, deleteUser } from '../lib/admin'
 import { t } from '../lib/i18n'
@@ -20,9 +20,7 @@ interface AdminStats {
   checkIns: number
   categories: number
   users: number
-}
-
-async function getUserCount(): Promise<number> {
+}async function getUserCount(): Promise<number> {
   try {
     const { supabase } = await import('../lib/supabase')
     const { count, error } = await supabase.from('users').select('email', { count: 'exact', head: true })
@@ -33,6 +31,12 @@ async function getUserCount(): Promise<number> {
   }
 }
 
+const PLACE_SOURCE_META: Record<'manual' | 'geoapify' | 'osm' | 'google', { emoji: string; cls: string }> = {
+  manual:   { emoji: '✏️', cls: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
+  geoapify: { emoji: '🛰️', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
+  osm:      { emoji: '🌍',  cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+  google:   { emoji: '🔎',  cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' },
+}
 
 
 interface UserRow {
@@ -74,6 +78,25 @@ export default function Admin() {
   const [deletePlaceConfirmId, setDeletePlaceConfirmId] = useState<string | null>(null)
   const [deletingPlaceId, setDeletingPlaceId] = useState<string | null>(null)
   const [placeMessages, setPlaceMessages] = useState<Record<string, string>>({})
+  const [placesSearch, setPlacesSearch] = useState('')
+  const [placesFilter, setPlacesFilter] = useState<'all' | 'manual' | 'imported'>('manual')
+
+  function getPlaceSource(p: Place): 'manual' | 'geoapify' | 'osm' | 'google' {
+    if (p.id.startsWith('google_')) return 'google'
+    if (p.id.startsWith('geoapify_')) return 'geoapify'
+    if (p.id.startsWith('osm_')) return 'osm'
+    return 'manual'
+  }
+
+  const filteredPlaces = useMemo(() => {
+    const q = placesSearch.trim().toLowerCase()
+    return places.filter((p) => {
+      if (placesFilter === 'manual' && getPlaceSource(p) !== 'manual') return false
+      if (placesFilter === 'imported' && getPlaceSource(p) === 'manual') return false
+      if (q && !p.name.toLowerCase().includes(q) && !p.address.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [places, placesSearch, placesFilter])
 
   useEffect(() => {
     if (!allowed) return
@@ -354,23 +377,61 @@ export default function Admin() {
                   className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-md max-h-[80vh] overflow-y-auto shadow-xl"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-bold dark:text-white">
-                      {t('admin.places_count', lang).replace('{count}', String(places.length))}
+                      {t('admin.places_count', lang).replace('{count}', String(filteredPlaces.length))}
+                      {(placesSearch || placesFilter !== 'all') && (
+                        <span className="text-xs text-gray-400 ml-2 font-normal">/ {places.length}</span>
+                      )}
                     </h2>
                     <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">&times;</button>
                   </div>
+                  <input
+                    type="search"
+                    value={placesSearch}
+                    onChange={(e) => setPlacesSearch(e.target.value)}
+                    placeholder={t('admin.search_places', lang)}
+                    className="w-full mb-3 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="flex gap-1 mb-3 text-xs">
+                    {([
+                      ['all', t('admin.filter_all', lang), places.length],
+                      ['manual', t('admin.filter_manual', lang), places.filter((p) => getPlaceSource(p) === 'manual').length],
+                      ['imported', t('admin.filter_imported', lang), places.filter((p) => getPlaceSource(p) !== 'manual').length],
+                    ] as Array<['all' | 'manual' | 'imported', string, number]>).map(([key, label, count]) => (
+                      <button
+                        key={key}
+                        onClick={() => setPlacesFilter(key)}
+                        className={`flex-1 px-2 py-1.5 rounded-lg font-medium transition-colors ${
+                          placesFilter === key
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
                   {placesLoading ? (
                     <div className="text-sm text-gray-500 py-6 text-center">Loading…</div>
-                  ) : places.length === 0 ? (
-                    <div className="text-sm text-gray-500 py-6 text-center">—</div>
+                  ) : filteredPlaces.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-6 text-center">
+                      {placesSearch ? t('admin.search_no_results', lang) : '—'}
+                    </div>
                   ) : (
                     <div className="space-y-2">
-                      {places.map((p) => {
+                      {filteredPlaces.map((p) => {
                         const invalid = !isValidLngLat(p.latitude, p.longitude)
+                        const source = getPlaceSource(p)
+                        const sourceMeta = PLACE_SOURCE_META[source]
                         return (
                           <div key={p.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                            <div className="font-medium text-sm dark:text-white break-words">{p.name}</div>
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div className="font-medium text-sm dark:text-white break-words">{p.name}</div>
+                              <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${sourceMeta.cls}`}>
+                                {sourceMeta.emoji} {t(`admin.source_${source}`, lang)}
+                              </span>
+                            </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{p.address}</div>
                             <div className="text-xs text-gray-400 mt-1 font-mono">
                               {(p.latitude ?? '—').toString().slice(0, 12)}, {(p.longitude ?? '—').toString().slice(0, 12)}
