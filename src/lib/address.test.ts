@@ -67,4 +67,17 @@ describe('parsePlaceAddress', () => {
     expect(parsePlaceAddress('Cafe Marco, Rome').country).toBeUndefined()
     expect(parsePlaceAddress('Somewhere, Nowhere').country).toBeUndefined()
   })
+
+  it('handles a Swedish street + postcode + city + country (väg is a street, not an admin)', () => {
+    const r = parsePlaceAddress('Hardeknuts väg 29, 291 66 Kristianstad, Sweden')
+    expect(r.city).toBe('Kristianstad')
+    expect(r.county).toBeUndefined()
+    expect(r.country).toBe('Sweden')
+  })
+
+  it('handles the Swedish vägen variant', () => {
+    const r = parsePlaceAddress('Drottningvägen 5, 111 60 Stockholm, Sweden')
+    expect(r.city).toBe('Stockholm')
+    expect(r.country).toBe('Sweden')
+  })
 })

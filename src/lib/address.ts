@@ -105,7 +105,7 @@ function extractCityFromPostcodeCombo(p: string): string | null {
 
 function isStreetLike(p: string): boolean {
   if (/\b(Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Place|Pl\.?|Way|Highway|Hwy\.?|Court|Ct\.?|Circle|Cir\.?|Terrace|Ter\.?|Parkway|Pkwy\.?|Alley|Path)\b/i.test(p)) return true
-  if (/\b(gate|gatan|gade|vei|allée|allee|platz|straße|strasse|str\.?|chaussee|chaussée)\b/i.test(p)) return true
+  if (/\b(gate|gatan|gade|vei|väg|vägen|allée|allee|platz|straße|strasse|str\.?|chaussee|chaussée)\b/i.test(p)) return true
   if (/^\d+[A-Z]?\s+\S/.test(p)) return true // "221B Baker Street"
   return false
 }

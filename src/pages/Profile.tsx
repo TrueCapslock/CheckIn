@@ -246,11 +246,15 @@ export default function Profile() {
     return { cities: sort(Array.from(cities)), counties: sort(Array.from(counties)), countries: sort(Array.from(countries)) }
   }, [checkIns])
 
-  const isRegionAchievement = (id: string) => id === 'first_city' || id.startsWith('city_') || id === 'first_county' || id.startsWith('county_')
-  const showRegionDetails =
-    !!selectedAchievement &&
-    isRegionAchievement(selectedAchievement.id) &&
-    (visitedRegions.cities.length > 0 || visitedRegions.counties.length > 0 || visitedRegions.countries.length > 0)
+  // Map a selected achievement to its region kind (which chip list to display).
+  // Returns null for non-region achievements (party, milestone, streak, etc.).
+  // 'country' is dormant until country achievement tiers exist.
+  const regionKind: 'city' | 'county' | 'country' | null = !selectedAchievement
+    ? null
+    : selectedAchievement.id === 'first_city' || selectedAchievement.id.startsWith('city_') ? 'city'
+    : selectedAchievement.id === 'first_county' || selectedAchievement.id.startsWith('county_') ? 'county'
+    : selectedAchievement.id === 'first_country' || selectedAchievement.id.startsWith('country_') ? 'country'
+    : null
 
   return (
     <div className="min-h-full bg-[var(--ci-bg)] text-[var(--ci-text)] pb-24">
@@ -556,52 +560,28 @@ export default function Profile() {
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{selectedAchievement.description}</p>
               <div className="text-yellow-700 dark:text-yellow-400 font-semibold text-lg mb-4">🪙+{selectedAchievement.coins}</div>
 
-              {showRegionDetails && (
-                <div className="text-left mb-4 space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
-                  {visitedRegions.cities.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
-                        {t('profile.cities_visited', lang).replace('{count}', String(visitedRegions.cities.length))}
-                      </p>
-                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
-                        {visitedRegions.cities.map((c) => (
-                          <span key={c} className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
+              {regionKind && (() => {
+                const PRESETS = {
+                  city:    { items: visitedRegions.cities,    labelKey: 'profile.cities_visited',    chip: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+                  county:  { items: visitedRegions.counties,  labelKey: 'profile.counties_visited',  chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
+                  country: { items: visitedRegions.countries, labelKey: 'profile.countries_visited', chip: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+                }[regionKind]
+                if (PRESETS.items.length === 0) return null
+                return (
+                  <div className="text-left mb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                      {t(PRESETS.labelKey, lang).replace('{count}', String(PRESETS.items.length))}
+                    </p>
+                    <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
+                      {PRESETS.items.map((name) => (
+                        <span key={name} className={`${PRESETS.chip} text-xs px-2 py-0.5 rounded-full font-medium`}>
+                          {name}
+                        </span>
+                      ))}
                     </div>
-                  )}
-                  {visitedRegions.counties.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
-                        {t('profile.counties_visited', lang).replace('{count}', String(visitedRegions.counties.length))}
-                      </p>
-                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
-                        {visitedRegions.counties.map((c) => (
-                          <span key={c} className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs px-2 py-0.5 rounded-full font-medium">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {visitedRegions.countries.length > 0 && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
-                        {t('profile.countries_visited', lang).replace('{count}', String(visitedRegions.countries.length))}
-                      </p>
-                      <div className="max-h-32 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
-                        {visitedRegions.countries.map((c) => (
-                          <span key={c} className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )
+              })()}
 
               <button
                 onClick={() => setSelectedAchievement(null)}
