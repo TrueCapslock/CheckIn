@@ -32,10 +32,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'city_5', title: 'Traveler', description: 'Visit 5 unique cities', icon: '🗺️', coins: 100 },
   { id: 'city_10', title: 'Globetrotter', description: 'Visit 10 unique cities', icon: '🌎', coins: 200 },
   { id: 'city_25', title: 'World Citizen', description: 'Visit 25 unique cities', icon: '🌍', coins: 500 },
-  { id: 'first_county', title: 'County Lines', description: 'Visit your first county', icon: '🛣️', coins: 50 },
-  { id: 'county_5', title: 'Regional', description: 'Visit 5 unique counties', icon: '📍', coins: 100 },
-  { id: 'county_10', title: 'Provincial', description: 'Visit 10 unique counties', icon: '🗺️', coins: 200 },
-  { id: 'county_25', title: 'National', description: 'Visit 25 unique counties', icon: '🇺🇳', coins: 500 },
+  { id: 'first_country', title: 'First Border', description: 'Visit your first country', icon: '🌍', coins: 50 },
+  { id: 'country_5', title: 'Continental', description: 'Visit 5 unique countries', icon: '🛂', coins: 100 },
+  { id: 'country_10', title: 'International', description: 'Visit 10 unique countries', icon: '✈️', coins: 200 },
+  { id: 'country_25', title: 'Globe Trotter', description: 'Visit 25 unique countries', icon: '🌐', coins: 500 },
   { id: 'streak_3', title: 'Hat Trick', description: 'Check in 3 days in a row', icon: '🏒', coins: 30 },
   { id: 'streak_7', title: 'Week Warrior', description: 'Check in 7 days in a row', icon: '📅', coins: 100 },
   { id: 'bar_streak_7', title: 'Bar Fly', description: 'Check in at any bar 7 days in a row', icon: '🍻', coins: 100 },
@@ -235,13 +235,13 @@ export async function checkAchievements(placeId: string, placeType: string, user
   if (count >= 50) unlock('checkins_50')
   if (count >= 100) unlock('checkins_100')
 
-  // ── City & county milestones ──
+  // ── City & country milestones ──
   // Look up each Place once (prefer local cache to avoid hammering Supabase) and
-  // parse city/county from its Nominatim-style address. Count unique values
+  // parse city/country from its Nominatim-style address. Count unique values
   // across all of the user's check-ins plus the current place.
   const uniquePlaceIds = Array.from(new Set([...mine.map((ci) => ci.place_id), placeId]))
   const cities = new Set<string>()
-  const counties = new Set<string>()
+  const countries = new Set<string>()
 
   for (const pid of uniquePlaceIds) {
     let place = getCachedPlace(pid)
@@ -249,9 +249,9 @@ export async function checkAchievements(placeId: string, placeType: string, user
       try { place = await getPlace(pid) } catch { /* keep null */ }
     }
     if (!place?.address) continue
-    const { city, county } = parsePlaceAddress(place.address)
+    const { city, country } = parsePlaceAddress(place.address)
     if (city) cities.add(city)
-    if (county) counties.add(county)
+    if (country) countries.add(country)
   }
 
   if (cities.size >= 1) unlock('first_city')
@@ -259,10 +259,10 @@ export async function checkAchievements(placeId: string, placeType: string, user
   if (cities.size >= 10) unlock('city_10')
   if (cities.size >= 25) unlock('city_25')
 
-  if (counties.size >= 1) unlock('first_county')
-  if (counties.size >= 5) unlock('county_5')
-  if (counties.size >= 10) unlock('county_10')
-  if (counties.size >= 25) unlock('county_25')
+  if (countries.size >= 1) unlock('first_country')
+  if (countries.size >= 5) unlock('country_5')
+  if (countries.size >= 10) unlock('country_10')
+  if (countries.size >= 25) unlock('country_25')
 
   saveAchievements(state)
   return justUnlocked
