@@ -37,6 +37,13 @@ export function parsePlaceAddress(address: string | null | undefined): ParsedAdd
   //    Keeping the duplicate gives us n=2 and the second position resolves to county.
   const admins: string[] = []
   let country: string | undefined
+  // Tracks whether the FIRST admin piece was inferred from a "postcode+locality" combo
+  // (e.g. "1366 Lysaker" → "Lysaker"). For a 3-token Norwegian address
+  // [road, pcode+locality, country] this flag says "the only admin we have is the
+  // postcode's sub-area, not a real city", which is what lets us suppress the city
+  // assignment further below without breaking 4-token Norwegian addresses (where the
+  // second admin IS the actual county).
+  let firstAdminIsPostcodeDerived = false
 
   for (const raw of parts) {
     const lo = raw.toLowerCase()
@@ -55,6 +62,7 @@ export function parsePlaceAddress(address: string | null | undefined): ParsedAdd
 
     // Classify: skip POIs and streets (those aren't administrative levels).
     if (isStreetLike(piece) || isVenueLike(piece)) continue
+    if (admins.length === 0 && extracted !== null) firstAdminIsPostcodeDerived = true
     admins.push(piece)
   }
 
@@ -88,6 +96,18 @@ export function parsePlaceAddress(address: string | null | undefined): ParsedAdd
     }
   }
 
+  // Norwegian 3-token pattern: "[road, postcode+locality, country]". The locality is
+  // almost always a suburb/village (e.g. "Lysaker", "Lørenskog", "Ski") rather than a
+  // proper city, so promoting it to "city" inflates the user's city list with junk.
+  // Drop the city in that narrow case UNLESS the locality is one of the major
+  // municipalities that Nominatim also occasionally surfaces in this 3-token form.
+  if (n === 1 && firstAdminIsPostcodeDerived && country === 'Norway' && SAFE_NORWEGIAN_CITIES.has(city!)) {
+    // Keep Oslo/Bergen/Trondheim/etc. — they're real cities even at 3 tokens.
+    // (Lysaker falls through; flag above isn't enough; the whitelist gates it.)
+  } else if (n === 1 && firstAdminIsPostcodeDerived && country === 'Norway' && city) {
+    city = undefined
+  }
+
   return { city, county: county2, country }
 }
 
@@ -110,7 +130,13 @@ function extractCityFromPostcodeCombo(p: string): string | null {
 
 function isStreetLike(p: string): boolean {
   if (/\b(Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Lane|Ln\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Place|Pl\.?|Way|Highway|Hwy\.?|Court|Ct\.?|Circle|Cir\.?|Terrace|Ter\.?|Parkway|Pkwy\.?|Alley|Path)\b/i.test(p)) return true
-  if (/(gate|gatan|gade|vei|väg|vägen|allée|allee|platz|straße|strasse|str\.?|chaussee|chaussée)(?=\s|\d|$)/i.test(p)) return true
+  // Scandi/German/French street suffixes. We list the BASE ("väg", "vei") and the
+  // DEFINITE form ("vägen", "veien") as separate alternation branches so that the
+  // `?` modifier doesn't silently flip "väg" into "väge" the way `vägen?` would
+  // (the `?` only applies to the immediately preceding character). The lookahead
+  // `(?=\s|\d|$)` requires the suffix to be followed by whitespace, a digit, or
+  // end of string — so we don't false-match the "stad" inside "Kristianstad".
+  if (/(gate|gatan|gate[ns]?|vei|veien|veg|vegen|väg|vägen|gade|gaden|allée|allee|platz|straße|strasse|str\.?|chaussee|chaussée)(?=\s|\d|$)/i.test(p)) return true
   if (/^\d+[A-Z]?\s+\S/.test(p)) return true // "221B Baker Street"
   return false
 }
@@ -216,4 +242,11 @@ const SUB_COUNTRY_REGIONS = new Set([
   'england', 'scotland', 'wales', 'northern ireland',
   'corsica', 'sicily', 'sardinia',
   'taiwan', 'hawaii', 'alaska',
+])
+
+// Major Norwegian municipalities that Nominatim still surfaces in the 3-token
+// "road, postcode+city, country" form. Used to gate the city suppression rule so
+// these aren't accidentally demoted to "no city" (compare: Lysaker, Lørenskog, Ski).
+const SAFE_NORWEGIAN_CITIES = new Set([
+  'Oslo', 'Bergen', 'Trondheim', 'Stavanger', 'Kristiansand', 'Tromsø', 'Drammen',
 ])

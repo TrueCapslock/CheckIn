@@ -80,4 +80,17 @@ describe('parsePlaceAddress', () => {
     expect(r.city).toBe('Stockholm')
     expect(r.country).toBe('Sweden')
   })
+
+  it('suppresses a Norway suburb that is the only admin in a 3-token address', () => {
+    const r = parsePlaceAddress('Fjellveien 15, 1366 Lysaker, Norway')
+    expect(r.city).toBeUndefined()
+    expect(r.county).toBeUndefined()
+    expect(r.country).toBe('Norway')
+  })
+
+  it('keeps a major Norwegian city even in the 3-token postcode+city+country form', () => {
+    const r = parsePlaceAddress('Karl Johans gate 1, 0154 Oslo, Norway')
+    expect(r.city).toBe('Oslo')
+    expect(r.country).toBe('Norway')
+  })
 })
