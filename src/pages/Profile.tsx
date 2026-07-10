@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { CheckIn, Place } from '../lib/types'
 import { getCategories } from '../lib/categories'
-import { getPlace } from '../lib/places'
+import { getPlace, reGeocodeAllPlacesMissingRegions } from '../lib/places'
 import { getAllCheckIns } from '../lib/places'
 import { getUsername, getUser, getAvatar, setAvatar, uploadAvatar, fetchAvatarUrl } from '../lib/user'
 import { getFollowing } from '../lib/follow'
@@ -21,7 +21,7 @@ import {
 } from '../lib/points'
 import type { LeaderboardEntry } from '../lib/points'
 import type { PartyLeaderboardEntry } from '../lib/party'
-import { ACHIEVEMENTS, getUnlockedAchievements } from '../lib/achievements'
+import { ACHIEVEMENTS, getUnlockedAchievements, checkAchievements } from '../lib/achievements'
 import type { AchievementDef } from '../lib/achievements'
 import { parsePlaceAddress } from '../lib/address'
 import { supabase } from '../lib/supabase'
@@ -112,6 +112,59 @@ export default function Profile() {
   const [activeParty, setActiveParty] = useState<Party | null>(null)
   const [partyLeaderboard, setPartyLeaderboard] = useState<PartyLeaderboardEntry[]>([])
   const [inviteCount, setInviteCount] = useState(0)
+  const [regeocodeState, setRegeocodeState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [regeocodeMessage, setRegeocodeMessage] = useState('')
+  const [regeocodeProgress, setRegeocodeProgress] = useState({ done: 0, total: 0 })
+
+  const loadCheckIns = async () => {
+    const items = await getAllCheckIns()
+    setAllCheckIns(items)
+    const mine = items.filter((ci) => ci.user_name === getUsername())
+    const withPlaces = await Promise.all(
+      mine.map(async (ci) => {
+        const place = await getPlace(ci.place_id)
+        return { ...ci, place }
+      }),
+    )
+    setCheckIns(withPlaces)
+  }
+
+  async function handleReGeocode() {
+    if (!username) return
+    setRegeocodeState('running')
+    setRegeocodeMessage('')
+    setRegeocodeProgress({ done: 0, total: 0 })
+    try {
+      const res = await reGeocodeAllPlacesMissingRegions((done, total) => {
+        setRegeocodeProgress({ done, total })
+      })
+      setRegeocodeState('done')
+      setRegeocodeProgress({ done: res.total, total: res.total })
+      if (res.total === 0) {
+        setRegeocodeMessage(t('admin.regeocode_empty', lang))
+      } else {
+        let msg = t('admin.regeocode_done', lang)
+          .replace('{updated}', String(res.updated))
+          .replace('{skipped}', String(res.skipped))
+        if (res.errors.length > 0) {
+          msg += ' · ' + t('admin.regeocode_errors', lang).replace('{count}', String(res.errors.length))
+        }
+        setRegeocodeMessage(msg)
+      }
+      // Reload checkins so the visitedRegions useMemo picks up the freshly-enriched
+      // addresses. Then re-run the achievements check against the (now-updated)
+      // most-recent check-in so any newly-reachable city/county milestone unlocks.
+      await loadCheckIns()
+      const mostRecent = checkIns[checkIns.length - 1]
+      if (mostRecent?.place?.id && mostRecent.place.type) {
+        await checkAchievements(mostRecent.place.id, mostRecent.place.type, username)
+      }
+      setUnlockedAchievements(getUnlockedAchievements().map((a) => a.id))
+    } catch (e) {
+      setRegeocodeState('error')
+      setRegeocodeMessage(t('admin.regeocode_failed', lang) + ': ' + (e as Error).message)
+    }
+  }
 
   useEffect(() => {
     getParties().then(({ created, invited }) => {
@@ -170,17 +223,8 @@ export default function Profile() {
   }
 
   useEffect(() => {
-    getAllCheckIns().then(async (items) => {
-      setAllCheckIns(items)
-      const mine = items.filter((ci) => ci.user_name === getUsername())
-      const withPlaces = await Promise.all(
-        mine.map(async (ci) => {
-          const place = await getPlace(ci.place_id)
-          return { ...ci, place }
-        }),
-      )
-      setCheckIns(withPlaces)
-    })
+    void loadCheckIns()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const [following] = useState(getFollowing())
@@ -530,6 +574,31 @@ export default function Profile() {
 
       {/* Achievements */}
       <div id="profile-achievements" className="px-4 pb-4 scroll-mt-4">
+        <div className="mb-4 rounded-2xl bg-[var(--ci-panel)] border border-[var(--ci-border)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold dark:text-white">{t('admin.regeocode_title', lang)}</p>
+              <p className="text-xs text-[var(--ci-muted)] mt-0.5">{t('admin.regeocode_desc', lang)}</p>
+            </div>
+            <button
+              onClick={handleReGeocode}
+              disabled={regeocodeState === 'running'}
+              className="shrink-0 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white disabled:text-gray-500 text-xs font-semibold rounded-lg transition-colors"
+            >
+              {regeocodeState === 'running' ? t('admin.regeocode_running', lang) : t('admin.regeocode_btn', lang)}
+            </button>
+          </div>
+          {regeocodeState === 'running' && regeocodeProgress.total > 0 && (
+            <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
+              {t('admin.regeocode_progress', lang).replace('{done}', String(regeocodeProgress.done)).replace('{total}', String(regeocodeProgress.total))}
+            </div>
+          )}
+          {regeocodeMessage && (
+            <div className={`mt-2 text-xs ${regeocodeState === 'done' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {regeocodeMessage}
+            </div>
+          )}
+        </div>
         <h2 className="font-semibold text-[var(--ci-muted)] mb-4">{t('profile.achievements', lang)}</h2>
         <div className="grid grid-cols-3 gap-2">
           {ACHIEVEMENTS.filter((a) => unlockedAchievements.includes(a.id)).map((a) => (
