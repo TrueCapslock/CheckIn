@@ -97,6 +97,11 @@ function extractCityFromPostcodeCombo(p: string): string | null {
   // UK style: "London NW1 6XE" → "London"
   const uk = p.match(/^(.+?)\s+[A-Z]{1,2}\d{1,2}[A-Z]?\s+\d[A-Z]{2}$/)
   if (uk) return uk[1].trim()
+  // Swedish style: "291 66 Kristianstad" or "111 60 Stockholm"
+  //   (3-5 digit postcode + 1-5 digit locality area + city). Must be checked BEFORE
+  //   the generic num pattern, otherwise the greedy `.+` swallows the locality code.
+  const se = p.match(/^\d{3,5}\s+\d{1,5}\s+(.+)$/)
+  if (se) return se[1].trim()
   // Norwegian / continental style: "0154 Oslo" → "Oslo"
   const num = p.match(/^\d{3,5}\s+(.+)$/)
   if (num) return num[1].trim()
