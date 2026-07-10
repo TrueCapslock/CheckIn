@@ -25,6 +25,7 @@ const TYPE_TAGS: Record<string, string[]> = {
   club: ['["amenity"="nightclub"]'],
   lounge: ['["amenity"="bar"]', '["amenity"="nightclub"]'],
   park: ['["leisure"="park"]', '["leisure"="garden"]'],
+  hotel: ['["tourism"="hotel"]'],
   things_to_do: ['["tourism"="attraction"]', '["tourism"="museum"]', '["tourism"="artwork"]', '["tourism"="gallery"]', '["historic"="monument"]'],
 }
 
@@ -69,6 +70,7 @@ export function osmTagToType(tags: Record<string, string>): string {
   if (amenity === 'nightclub') return 'club'
   if (amenity === 'lounge') return 'lounge'
   if (tags.leisure === 'park' || tags.leisure === 'garden') return 'park'
+  if (tags.tourism === 'hotel' || tags.tourism === 'motel' || tags.tourism === 'hostel') return 'hotel'
   if (tags.tourism === 'attraction' || tags.tourism === 'museum' || tags.tourism === 'artwork' || tags.tourism === 'gallery' || tags.historic === 'monument') return 'things_to_do'
   return 'bar'
 }
@@ -193,7 +195,7 @@ export function overpassToPlace(o: OverpassResult) {
   return {
     id: o.id,
     name: o.name,
-    type: o.type as 'bar' | 'restaurant' | 'cafe' | 'club' | 'lounge',
+    type: o.type as string,
     address: o.address,
     description: null,
     photo_url: null,

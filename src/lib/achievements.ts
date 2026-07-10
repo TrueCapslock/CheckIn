@@ -1,5 +1,7 @@
 import { awardCoins } from './points'
-import { getAllCheckIns } from './places'
+import { getAllCheckIns, getPlace } from './places'
+import { getCachedPlace } from './local-places'
+import { parsePlaceAddress } from './address'
 import { getUser } from './user'
 import { getTodayLocal } from './date'
 
@@ -25,6 +27,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'first_lounge', title: 'First Sip', description: 'Check in at a lounge', icon: '🥂', coins: 15 },
   { id: 'first_park', title: 'Green Thumb', description: 'Check in at a park', icon: '🌳', coins: 15 },
   { id: 'first_things_to_do', title: 'Tourist', description: 'Check in at a tourist attraction', icon: '🎪', coins: 15 },
+  { id: 'first_hotel', title: 'First Stay', description: 'Check in at a hotel', icon: '🏨', coins: 15 },
+  { id: 'first_city', title: 'Explorer', description: 'Visit your first city', icon: '🏙️', coins: 25 },
+  { id: 'city_5', title: 'Traveler', description: 'Visit 5 unique cities', icon: '🗺️', coins: 100 },
+  { id: 'city_10', title: 'Globetrotter', description: 'Visit 10 unique cities', icon: '🌎', coins: 200 },
+  { id: 'city_25', title: 'World Citizen', description: 'Visit 25 unique cities', icon: '🌍', coins: 500 },
+  { id: 'first_county', title: 'County Lines', description: 'Visit your first county', icon: '🛣️', coins: 50 },
+  { id: 'county_5', title: 'Regional', description: 'Visit 5 unique counties', icon: '📍', coins: 100 },
+  { id: 'county_10', title: 'Provincial', description: 'Visit 10 unique counties', icon: '🗺️', coins: 200 },
+  { id: 'county_25', title: 'National', description: 'Visit 25 unique counties', icon: '🇺🇳', coins: 500 },
   { id: 'streak_3', title: 'Hat Trick', description: 'Check in 3 days in a row', icon: '🏒', coins: 30 },
   { id: 'streak_7', title: 'Week Warrior', description: 'Check in 7 days in a row', icon: '📅', coins: 100 },
   { id: 'bar_streak_7', title: 'Bar Fly', description: 'Check in at any bar 7 days in a row', icon: '🍻', coins: 100 },
@@ -154,7 +165,7 @@ export interface UnlockResult {
   total: number
 }
 
-export async function checkAchievements(_placeId: string, placeType: string, userName: string): Promise<UnlockResult[]> {
+export async function checkAchievements(placeId: string, placeType: string, userName: string): Promise<UnlockResult[]> {
   const state = loadAchievements()
   const streaks = loadStreaks()
   const today = getTodayLocal()
@@ -223,6 +234,35 @@ export async function checkAchievements(_placeId: string, placeType: string, use
   if (count >= 10) unlock('checkins_10')
   if (count >= 50) unlock('checkins_50')
   if (count >= 100) unlock('checkins_100')
+
+  // ── City & county milestones ──
+  // Look up each Place once (prefer local cache to avoid hammering Supabase) and
+  // parse city/county from its Nominatim-style address. Count unique values
+  // across all of the user's check-ins plus the current place.
+  const uniquePlaceIds = Array.from(new Set([...mine.map((ci) => ci.place_id), placeId]))
+  const cities = new Set<string>()
+  const counties = new Set<string>()
+
+  for (const pid of uniquePlaceIds) {
+    let place = getCachedPlace(pid)
+    if (!place) {
+      try { place = await getPlace(pid) } catch { /* keep null */ }
+    }
+    if (!place?.address) continue
+    const { city, county } = parsePlaceAddress(place.address)
+    if (city) cities.add(city)
+    if (county) counties.add(county)
+  }
+
+  if (cities.size >= 1) unlock('first_city')
+  if (cities.size >= 5) unlock('city_5')
+  if (cities.size >= 10) unlock('city_10')
+  if (cities.size >= 25) unlock('city_25')
+
+  if (counties.size >= 1) unlock('first_county')
+  if (counties.size >= 5) unlock('county_5')
+  if (counties.size >= 10) unlock('county_10')
+  if (counties.size >= 25) unlock('county_25')
 
   saveAchievements(state)
   return justUnlocked

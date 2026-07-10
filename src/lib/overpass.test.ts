@@ -44,6 +44,14 @@ describe('osmTagToType', () => {
     expect(osmTagToType({ amenity: 'lounge' })).toBe('lounge')
   })
 
+  it('maps tourism=hotel to hotel', () => {
+    expect(osmTagToType({ tourism: 'hotel' })).toBe('hotel')
+  })
+
+  it('maps tourism=hostel to hotel', () => {
+    expect(osmTagToType({ tourism: 'hostel' })).toBe('hotel')
+  })
+
   it('defaults to bar for unknown amenity', () => {
     expect(osmTagToType({ amenity: 'pub' })).toBe('bar')
   })
@@ -82,5 +90,10 @@ describe('overpassToPlace', () => {
   it('preserves the type', () => {
     const lounge: OverpassResult = { ...result, type: 'lounge' }
     expect(overpassToPlace(lounge).type).toBe('lounge')
+  })
+
+  it('preserves hotel type (the overpassToPlace type union is widened to string)', () => {
+    const hotel: OverpassResult = { ...result, type: 'hotel' }
+    expect(overpassToPlace(hotel).type).toBe('hotel')
   })
 })

@@ -35,6 +35,7 @@ const TYPE_MAP: Record<string, string> = {
   pub: 'bar',
   bakery: 'cafe',
   coffee_shop: 'cafe',
+  lodging: 'hotel',
 }
 
 export function mapGoogleType(types: string[]): string {
@@ -95,6 +96,11 @@ export async function searchGooglePlaces(
     retries: 1,
     backoff: 500,
   })
+
+  // Hotel/lodging searches go through includedTypes rather than textQuery
+  if (typeFilter === 'hotel' && Array.isArray(body.includedTypes)) {
+    body.includedTypes = ['lodging']
+  }
 
   if (!res.ok) {
     const text = await res.text()

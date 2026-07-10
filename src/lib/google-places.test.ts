@@ -38,6 +38,10 @@ describe('mapGoogleType', () => {
     expect(mapGoogleType(['coffee_shop'])).toBe('cafe')
   })
 
+  it('maps lodging to hotel', () => {
+    expect(mapGoogleType(['lodging'])).toBe('hotel')
+  })
+
   it('defaults to restaurant for unknown types', () => {
     expect(mapGoogleType(['unknown_type'])).toBe('restaurant')
   })

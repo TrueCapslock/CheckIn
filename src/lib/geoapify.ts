@@ -13,6 +13,7 @@ const CATEGORIES = [
   'adult.nightclub',
   'leisure.park',
   'leisure.park.garden',
+  'accommodation.hotel',
   'tourism.attraction',
   'entertainment.museum',
   'tourism.attraction.artwork',
@@ -58,6 +59,7 @@ function geoapifyType(categories: string[] = []): string {
   if (/entertainment/.test(cats)) return 'things_to_do'
   if (/leisure\.park/.test(cats)) return 'park'
   if (/leisure/.test(cats)) return 'things_to_do'
+  if (/accommodation/.test(cats)) return 'hotel'
   if (/tourism/.test(cats)) return 'things_to_do'
   if (/activity/.test(cats)) return 'club'
   if (/commercial/.test(cats)) return 'things_to_do'
