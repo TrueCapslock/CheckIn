@@ -173,6 +173,11 @@ export default function PlaceDetail() {
 
   const handleSubmitRating = async (stars: number) => {
     if (!id || submittingRating) return
+    // Defensive guard: a user is only allowed to rate a place once. The RateStars
+    // component is already disabled when `myRating` is set, but a stale state
+    // (e.g. optimistic tap arrives before getMyRatingForPlace finishes) can race
+    // past the disabled prop — this guard catches that.
+    if (myRating) return
     setSubmittingRating(true)
     setRatingError(null)
     const optimistic: Rating = {
@@ -315,11 +320,13 @@ export default function PlaceDetail() {
           )}
 
           <div className="mt-3 flex items-center gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
-            <span className="text-sm text-gray-600 dark:text-gray-400">{t('place_detail.rate_this', lang)}</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {myRating ? t('place_detail.your_rating', lang) : t('place_detail.rate_this', lang)}
+            </span>
             <RateStars
               value={myRating?.rating ?? 0}
               onChange={(v) => void handleSubmitRating(v)}
-              disabled={submittingRating}
+              disabled={submittingRating || !!myRating}
             />
             {submittingRating && (
               <span className="text-xs text-gray-400">{t('place_detail.submitting_rating', lang)}</span>

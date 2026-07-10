@@ -5,7 +5,7 @@ import { loadUserProfileFromDb, clearAllAppData } from './lib/user-registry'
 import { loadFollowsFromDb } from './lib/follow'
 import { loadConfigFromDb } from './lib/admin'
 import { loadStreaksFromDb } from './lib/achievements'
-import { processQueue, isOnline } from './lib/sync'
+import { processQueue, processRatingsQueue, isOnline } from './lib/sync'
 import { loadCategories } from './lib/categories'
 import { useDarkMode } from './lib/use-dark-mode'
 import { DarkModeContext } from './lib/dark-mode-context'
@@ -36,6 +36,8 @@ function SyncQueue() {
     if (!isOnline()) return
     const { ok } = await processQueue()
     if (ok > 0) console.log(`Synced ${ok} queued check-ins`)
+    const { ok: okRatings } = await processRatingsQueue()
+    if (okRatings > 0) console.log(`Synced ${okRatings} queued ratings`)
   }, [])
 
   useEffect(() => {
