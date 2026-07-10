@@ -8,6 +8,8 @@ import { checkAchievements } from './achievements'
 import { getUsername } from './user'
 import { getFollowing } from './follow'
 import { fetchWithRetry, promiseWithTimeout } from './fetch'
+import { composeAddressFromLngLat } from './reverse-geocode'
+import { parsePlaceAddress } from './address'
 import { getDistance } from './location'
 import { getMaxCheckInDistance } from './admin'
 import { getTodayLocal, isoToLocalDate } from './date'
@@ -173,22 +175,100 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
       retries: 1,
       backoff: 500,
     })
-    if (!res.ok) return null
-    const data = await res.json() as Record<string, unknown>
-    if (!data || data.error) return null
-    if (data.display_name) return data.display_name as string
-    const tags = data.address as Record<string, string> | undefined
-    if (tags) {
-      const parts: string[] = []
-      if (tags.road) parts.push(tags.house_number ? `${tags.house_number} ${tags.road}` : tags.road)
-      if (tags.city || tags.town || tags.village) parts.push(tags.city || tags.town || tags.village)
-      if (tags.country) parts.push(tags.country)
-      if (parts.length) return parts.join(', ')
+    const data = res.ok ? ((await res.json()) as Record<string, unknown>) : null
+    if (data && !data.error) {
+      const displayName = data.display_name as string | undefined
+      // If Nominatim already returned admin-level info, use it as-is.
+      const tags = data.address as Record<string, string> | undefined
+      const hasCity = !!(tags && (tags.city || tags.town || tags.village))
+      const hasCountry = !!(tags && tags.country)
+      if (displayName && hasCity && hasCountry) return displayName
+    }
+
+    // Fall back to composing an address from Photon/BigDataCloud so the place has
+    // city/country info even when Nominatim returned thin data (or failed).
+    const composed = await composeAddressFromLngLat(lng, lat, undefined)
+    if (composed) return composed
+
+    // Last-resort: best-effort minimal string from Nominatim's tags.
+    if (data) {
+      const tags = data.address as Record<string, string> | undefined
+      if (tags) {
+        const parts: string[] = []
+        if (tags.road) parts.push(tags.house_number ? `${tags.house_number} ${tags.road}` : tags.road)
+        if (tags.city || tags.town || tags.village) parts.push(tags.city || tags.town || tags.village)
+        if (tags.country) parts.push(tags.country)
+        if (parts.length) return parts.join(', ')
+      }
+      return (data.display_name as string | undefined) ?? null
     }
     return null
   } catch {
     return null
   }
+}
+
+export interface ReGeocodeResult {
+  total: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
+/**
+ * Re-runs reverse-geocoding (via Photon/BigDataCloud) for every place whose
+ * already-stored address doesn't yield a city or country. Writes the enriched
+ * address back to Supabase + the local list cache so the achievement parser picks
+ * it up.
+ *
+ * Throttles each request by 200 ms to stay polite to upstreams. `signal` lets the
+ * caller cancel mid-pass (admin button reset). `onProgress` fires with the count.
+ */
+export async function reGeocodeAllPlacesMissingRegions(
+  onProgress?: (done: number, total: number) => void,
+  signal?: { aborted: boolean },
+): Promise<ReGeocodeResult> {
+  const { sleepThrottle } = await import('./reverse-geocode')
+  const all = await getPlaces()
+  const targets = all.filter((p) => {
+    if (p.latitude == null || p.longitude == null) return false
+    const parsed = parsePlaceAddress(p.address)
+    return !(parsed.city || parsed.country)
+  })
+  const result: ReGeocodeResult = { total: targets.length, updated: 0, skipped: 0, errors: [] }
+
+  for (let i = 0; i < targets.length; i++) {
+    if (signal?.aborted) break
+    const place = targets[i]
+    onProgress?.(i, targets.length)
+    try {
+      const newAddress = await composeAddressFromLngLat(place.longitude!, place.latitude!, place.name)
+      if (!newAddress) {
+        result.skipped++
+        continue
+      }
+      const updated: Place = { ...place, address: newAddress }
+      await upsertPlaceInSupabase(updated)
+      try {
+        const raw = localStorage.getItem(PLACES_LIST_CACHE_KEY)
+        if (raw) {
+          const list = JSON.parse(raw) as Place[]
+          const idx = list.findIndex((p) => p.id === place.id)
+          if (idx >= 0) {
+            list[idx] = updated
+            localStorage.setItem(PLACES_LIST_CACHE_KEY, JSON.stringify(list))
+          }
+        }
+        cachePlace(updated)
+      } catch { /* ignore local cache update */ }
+      result.updated++
+    } catch (e) {
+      result.errors.push(`${place.name || place.id}: ${(e as Error).message}`)
+    }
+    await sleepThrottle()
+  }
+  onProgress?.(targets.length, targets.length)
+  return result
 }
 
 export async function getPlace(id: string): Promise<Place | null> {
