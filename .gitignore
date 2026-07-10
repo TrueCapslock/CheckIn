@@ -29,3 +29,6 @@ dist-ssr
 
 # Dev tooling
 .developer-control-center/
+
+# App build artifact — must not be committed (history-rewrite incident Jul 2026)
+isolate/
