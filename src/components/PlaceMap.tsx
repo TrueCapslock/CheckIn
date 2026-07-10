@@ -6,6 +6,7 @@ import { useDarkModeContext } from '../lib/dark-mode-context'
 import { getMaxCheckInDistance } from '../lib/admin'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { useEffect, useState, useRef } from 'react'
+import { isValidLngLat } from '../lib/location'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 
@@ -62,6 +63,13 @@ function circleGeoJSON(center: { lat: number; lng: number }, radiusM: number, po
 
 const token = import.meta.env.VITE_MAPBOX_TOKEN
 
+const DEFAULT_CENTER_LNG = -122.6784
+const DEFAULT_CENTER_LAT = 45.5152
+
+// Module-level dedupe of console.warn() for invalid-coord places so re-renders
+// don't spam the dev console. Reset only on full page reload.
+const warnedInvalidPlaceIds = new Set<string>()
+
 export default function PlaceMap({ places, userLocation }: PlaceMapProps) {
   const { dark } = useDarkModeContext()
   const [popupId, setPopupId] = useState<string | null>(null)
@@ -93,9 +101,12 @@ export default function PlaceMap({ places, userLocation }: PlaceMapProps) {
     setMapError(null)
   }
 
-  const center: [number, number] = userLocation
-    ? [userLocation.longitude, userLocation.latitude]
-    : [-122.6784, 45.5152]
+  // Strict coordinate check prevents Mapbox from throwing when a place row has
+  // an out-of-range lat or lng (e.g., lat=200 entered by mistake).
+  const validUserLocation = isValidLngLat(userLocation?.latitude, userLocation?.longitude)
+  const center: [number, number] = validUserLocation
+    ? [userLocation!.longitude, userLocation!.latitude]
+    : [DEFAULT_CENTER_LNG, DEFAULT_CENTER_LAT]
 
   return (
     <>
@@ -180,14 +191,14 @@ export default function PlaceMap({ places, userLocation }: PlaceMapProps) {
         />
 
       {/* User location dot */}
-      {userLocation && (
+      {userLocation && validUserLocation && (
         <Marker longitude={userLocation.longitude} latitude={userLocation.latitude}>
           <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg" />
         </Marker>
       )}
 
       {/* Check-in radius circle */}
-      {userLocation && (
+      {userLocation && validUserLocation && (
         <Source id="checkin-radius" type="geojson" data={circleGeoJSON({ lat: userLocation.latitude, lng: userLocation.longitude }, getMaxCheckInDistance())}>
           <Layer
             id="checkin-radius-fill"
@@ -210,47 +221,55 @@ export default function PlaceMap({ places, userLocation }: PlaceMapProps) {
         </Source>
       )}
 
-      {places.map(
-        (place) =>
-          place.longitude &&
-          place.latitude && (
-            <Marker
-              key={place.id}
-              longitude={place.longitude}
-              latitude={place.latitude}
-              onClick={() => setPopupId(place.id)}
-            >
-              <div className="w-9 h-9 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-lg shadow-lg border-2 border-white dark:border-gray-700 cursor-pointer">{getCategoryIcon(place.type)}</div>
-            </Marker>
-          ),
-      )}
-      {places.map(
-        (place) =>
-          popupId === place.id && place.longitude && place.latitude && (
-            <Popup
-              key={`popup-${place.id}`}
-              longitude={place.longitude}
-              latitude={place.latitude}
-              closeOnClick={false}
-              onClose={() => setPopupId(null)}
-              offset={18}
-              maxWidth="320px"
-            >
-              <div className="text-sm">
-                <div className="font-semibold">
-                  {getCategoryIcon(place.type)} {place.name}
-                </div>
-                <div className="text-gray-500 dark:text-gray-400 capitalize">{place.type}</div>
-                <Link
-                  to={`/places/${place.id}`}
-                  className="text-blue-600 dark:text-blue-400 text-xs mt-1 inline-block"
-                >
-                  {t('place_map.view_place', lang)}
-                </Link>
+      {places.map((place) => {
+        if (!isValidLngLat(place.latitude, place.longitude)) {
+          if (!warnedInvalidPlaceIds.has(place.id)) {
+            warnedInvalidPlaceIds.add(place.id)
+            console.warn('[PlaceMap] skipping place with invalid LngLat:', place.id, place.latitude, place.longitude)
+          }
+          return null
+        }
+        // isValidLngLat is a value-returning predicate (not a TS type predicate), so
+        // TS can't narrow place.latitude/longitude from `number | null` to `number`.
+        // Use non-null assertion since we've just verified they are valid numbers.
+        return (
+          <Marker
+            key={place.id}
+            longitude={place.longitude!}
+            latitude={place.latitude!}
+            onClick={() => setPopupId(place.id)}
+          >
+            <div className="w-9 h-9 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-lg shadow-lg border-2 border-white dark:border-gray-700 cursor-pointer">{getCategoryIcon(place.type)}</div>
+          </Marker>
+        )
+      })}
+      {places.map((place) => {
+        if (popupId !== place.id || !isValidLngLat(place.latitude, place.longitude)) return null
+        return (
+          <Popup
+            key={`popup-${place.id}`}
+            longitude={place.longitude!}
+            latitude={place.latitude!}
+            closeOnClick={false}
+            onClose={() => setPopupId(null)}
+            offset={18}
+            maxWidth="320px"
+          >
+            <div className="text-sm">
+              <div className="font-semibold">
+                {getCategoryIcon(place.type)} {place.name}
               </div>
-            </Popup>
-          ),
-      )}
+              <div className="text-gray-500 dark:text-gray-400 capitalize">{place.type}</div>
+              <Link
+                to={`/places/${place.id}`}
+                className="text-blue-600 dark:text-blue-400 text-xs mt-1 inline-block"
+              >
+                {t('place_map.view_place', lang)}
+              </Link>
+            </div>
+          </Popup>
+        )
+      })}
       </Map>
       <div className="pointer-events-none absolute inset-0 z-[1] dark:bg-emerald-400/20 dark:mix-blend-overlay" />
     </div>

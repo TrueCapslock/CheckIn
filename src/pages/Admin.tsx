@@ -4,7 +4,8 @@ import { isAdmin, getMaxCheckInDistance, setMaxCheckInDistance, isPartyEnabled, 
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 import { getCategories } from '../lib/categories'
-import { getAllCheckIns, getPlaces, getPlace } from '../lib/places'
+import { getAllCheckIns, getPlaces, getPlace, deletePlaceInSupabase } from '../lib/places'
+import { isValidLngLat } from '../lib/location'
 import type { CheckIn, Place } from '../lib/types'
 import AdminImportMap from '../components/AdminImportMap'
 import AdminAddPlace from '../components/AdminAddPlace'
@@ -42,6 +43,8 @@ interface UserRow {
   created_at: string
 }
 
+type Popup = 'checkins' | 'users' | 'places' | 'place-form' | null
+
 export default function Admin() {
   const navigate = useNavigate()
   const { lang } = useLanguage()
@@ -50,6 +53,9 @@ export default function Admin() {
   const [stats, setStats] = useState<AdminStats>({ places: 0, checkIns: 0, categories: 0, users: 0 })
   const [recent, setRecent] = useState<CheckInWithPlace[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
+  const [places, setPlaces] = useState<Place[]>([])
+  const [placesLoading, setPlacesLoading] = useState(false)
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null)
   const [loading, setLoading] = useState(true)
   const [maxDist, setMaxDist] = useState(getMaxCheckInDistance())
   const [partyEnabled, setPartyEnabledState] = useState(isPartyEnabled())
@@ -59,12 +65,15 @@ export default function Admin() {
   const [resetState, setResetState] = useState<'idle' | 'confirm' | 'running' | 'done' | 'error'>('idle')
   const [resetMessage, setResetMessage] = useState('')
   const [fullReset, setFullReset] = useState(false)
-  const [popup, setPopup] = useState<'checkins' | 'users' | 'addplace' | null>(null)
+  const [popup, setPopup] = useState<Popup>(null)
   const [recalcUserEmail, setRecalcUserEmail] = useState<string | null>(null)
   const [recalcUserMessage, setRecalcUserMessage] = useState<Record<string, string>>({})
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState<string | null>(null)
   const [deletingUserEmail, setDeletingUserEmail] = useState<string | null>(null)
   const [deleteUserMessage, setDeleteUserMessage] = useState<Record<string, string>>({})
+  const [deletePlaceConfirmId, setDeletePlaceConfirmId] = useState<string | null>(null)
+  const [deletingPlaceId, setDeletingPlaceId] = useState<string | null>(null)
+  const [placeMessages, setPlaceMessages] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!allowed) return
@@ -84,6 +93,18 @@ export default function Admin() {
       const { data, error } = await supabase.from('users').select('email, name, points, coins, created_at').order('created_at', { ascending: false })
       if (!error && data) setUsers(data as UserRow[])
     } catch {}
+  }
+
+  async function loadPlaces() {
+    setPlacesLoading(true)
+    try {
+      const data = await getPlaces()
+      setPlaces(data)
+      // Keep the stat card in sync — the main useEffect only runs once on mount.
+      setStats((prev) => ({ ...prev, places: data.length }))
+    } finally {
+      setPlacesLoading(false)
+    }
   }
 
   async function handleRecalculateUser(user: UserRow) {
@@ -136,6 +157,36 @@ export default function Admin() {
     setDeleteConfirmEmail(null)
   }
 
+  async function handleDeletePlace(p: Place) {
+    if (deletePlaceConfirmId !== p.id) {
+      setDeletePlaceConfirmId(p.id)
+      setPlaceMessages((prev) => ({ ...prev, [p.id]: t('admin.delete_place_confirm', lang) }))
+      return
+    }
+    setDeletingPlaceId(p.id)
+    setPlaceMessages((prev) => ({ ...prev, [p.id]: '' }))
+    const res = await deletePlaceInSupabase(p.id)
+    setDeletingPlaceId(null)
+    if (!res.ok) {
+      if (res.code === '23503') {
+        setPlaceMessages((prev) => ({ ...prev, [p.id]: t('admin.delete_place_in_use', lang) }))
+      } else {
+        setPlaceMessages((prev) => ({ ...prev, [p.id]: `${t('admin.delete_place_failed', lang)}: ${res.error}` }))
+      }
+      return
+    }
+    setPlaces((prev) => prev.filter((x) => x.id !== p.id))
+    setStats((prev) => ({ ...prev, places: Math.max(0, prev.places - 1) }))
+    setDeletePlaceConfirmId(null)
+  }
+
+  function closePlaceForm() {
+    setPopup(null)
+    setEditingPlace(null)
+    setDeletePlaceConfirmId(null)
+    setPlaceMessages({})
+  }
+
   if (!allowed) {
     return (
       <div className="flex flex-col h-full px-4 pt-6">
@@ -183,12 +234,12 @@ export default function Admin() {
             <div className="grid grid-cols-2 gap-3 mb-6">
               {([
                 [t('admin.users', lang), stats.users, 'users'],
-                [t('admin.places', lang), stats.places, null],
+                [t('admin.places', lang), stats.places, 'places'],
                 [t('admin.checkins', lang), stats.checkIns, 'checkins'],
                 [t('admin.categories', lang), stats.categories, null],
               ] as [string, number, string | null][]).map(([label, value, popupKey]) => (
                 popupKey ? (
-                  <button key={label} onClick={() => { setPopup(popupKey as 'checkins' | 'users'); if (popupKey === 'users') loadUsers() }} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors w-full">
+                  <button key={label} onClick={() => { setPopup(popupKey as Popup); if (popupKey === 'users') loadUsers(); else if (popupKey === 'places') loadPlaces() }} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors w-full">
                     <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{value}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
                   </button>
@@ -289,6 +340,110 @@ export default function Admin() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Places popup */}
+            {popup === 'places' && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+                onClick={() => setPopup(null)}
+              >
+                <div
+                  className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-md max-h-[80vh] overflow-y-auto shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold dark:text-white">
+                      {t('admin.places_count', lang).replace('{count}', String(places.length))}
+                    </h2>
+                    <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">&times;</button>
+                  </div>
+                  {placesLoading ? (
+                    <div className="text-sm text-gray-500 py-6 text-center">Loading…</div>
+                  ) : places.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-6 text-center">—</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {places.map((p) => {
+                        const invalid = !isValidLngLat(p.latitude, p.longitude)
+                        return (
+                          <div key={p.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                            <div className="font-medium text-sm dark:text-white break-words">{p.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{p.address}</div>
+                            <div className="text-xs text-gray-400 mt-1 font-mono">
+                              {(p.latitude ?? '—').toString().slice(0, 12)}, {(p.longitude ?? '—').toString().slice(0, 12)}
+                            </div>
+                            {invalid && (
+                              <div className="mt-1 text-xs font-bold text-red-600 dark:text-red-400">
+                                ⚠️ {t('admin.invalid_coords', lang)}
+                              </div>
+                            )}
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingPlace(p)
+                                  setPopup('place-form')
+                                  setDeletePlaceConfirmId(null)
+                                  setPlaceMessages({})
+                                }}
+                                className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                              >
+                                {t('admin.edit_place', lang)}
+                              </button>
+                              <button
+                                onClick={() => handleDeletePlace(p)}
+                                disabled={deletingPlaceId === p.id}
+                                className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:bg-gray-300 dark:disabled:bg-gray-700"
+                              >
+                                {deletingPlaceId === p.id
+                                  ? '…'
+                                  : deletePlaceConfirmId === p.id
+                                    ? t('admin.delete_user_confirm_button', lang)
+                                    : t('admin.delete_place', lang)}
+                              </button>
+                            </div>
+                            {placeMessages[p.id] && (
+                              <div className="mt-2 text-xs text-red-500">{placeMessages[p.id]}</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Add or Edit Place form (unified via editingPlace presence) */}
+            {popup === 'place-form' && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+                onClick={closePlaceForm}
+              >
+                <div
+                  className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold dark:text-white">
+                      {editingPlace ? t('admin.edit_place', lang) : t('admin.add_place', lang)}
+                    </h2>
+                    <button onClick={closePlaceForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">&times;</button>
+                  </div>
+                  <AdminAddPlace
+                    key={editingPlace?.id ?? 'addplace-new'}
+                    editing={editingPlace ?? undefined}
+                    onSaved={() => {
+                      closePlaceForm()
+                      loadPlaces()
+                    }}
+                    onDeleted={() => {
+                      closePlaceForm()
+                      loadPlaces()
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -437,29 +592,10 @@ export default function Admin() {
 
               <AdminImportMap />
 
-              <button onClick={() => setPopup('addplace')} className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium text-sm transition-colors">
+              <button onClick={() => { setEditingPlace(null); setPopup('place-form') }} className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium text-sm transition-colors">
                 {t('admin.add_place', lang)}
               </button>
             </div>
-
-            {/* Add Place Manually popup */}
-            {popup === 'addplace' && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-                onClick={() => setPopup(null)}
-              >
-                <div
-                  className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold dark:text-white">{t('admin.add_place', lang)}</h2>
-                    <button onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none">&times;</button>
-                  </div>
-                  <AdminAddPlace />
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

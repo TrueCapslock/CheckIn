@@ -3,6 +3,7 @@ import Map, { Marker, NavigationControl } from 'react-map-gl/mapbox'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
+import { isValidLngLat } from '../lib/location'
 
 const token = import.meta.env.VITE_MAPBOX_TOKEN
 
@@ -16,8 +17,9 @@ interface Props {
 
 export default function MiniMapPicker({ lat, lng, onSelect }: Props) {
   const { lang } = useLanguage()
+  const validInitial = isValidLngLat(lat, lng)
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(
-    lat !== undefined && lng !== undefined ? { lat, lng } : null
+    validInitial ? { lat: lat!, lng: lng! } : null
   )
 
   if (!token) {
@@ -32,9 +34,10 @@ export default function MiniMapPicker({ lat, lng, onSelect }: Props) {
     <div className="rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600" style={{ height: 280 }}>
       <Map
         mapboxAccessToken={token}
-        initialViewState={point ? { longitude: point.lng, latitude: point.lat, zoom: 14 } : DEFAULT_VIEW}
+        initialViewState={validInitial ? { longitude: point!.lng, latitude: point!.lat, zoom: 14 } : DEFAULT_VIEW}
         mapStyle="mapbox://styles/mapbox/streets-v12"
         onClick={(e) => {
+          if (!isValidLngLat(e.lngLat.lat, e.lngLat.lng)) return
           const p = { lat: e.lngLat.lat, lng: e.lngLat.lng }
           setPoint(p)
           onSelect(p.lat, p.lng)

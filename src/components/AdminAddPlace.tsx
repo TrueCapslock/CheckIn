@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { getCategories } from '../lib/categories'
-import { batchUpsertPlaces } from '../lib/places'
+import { batchUpsertPlaces, deletePlaceInSupabase } from '../lib/places'
+import { isValidLngLat } from '../lib/location'
+import type { Place } from '../lib/types'
 import MiniMapPicker from './MiniMapPicker'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
@@ -29,18 +31,39 @@ const emptyForm: FormState = {
 
 interface Props {
   selectedLocation?: { lat: number; lng: number; address?: string } | null
+  editing?: Place | null
+  onSaved?: () => void
+  onDeleted?: () => void
 }
 
-export default function AdminAddPlace({ selectedLocation }: Props) {
+export default function AdminAddPlace({ selectedLocation, editing, onSaved, onDeleted }: Props) {
   const categories = getCategories()
   const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [showPicker, setShowPicker] = useState(false)
   const { lang } = useLanguage()
+  const isEditing = !!editing
+
+  // When editing prop changes (keyed by id to avoid re-pill when parent re-renders
+  // with the same place object), prefill the form. Guard null/undefined DB values
+  // with `?? ''` so that submit-time `.trim()` calls don't throw on nulls.
+  useEffect(() => {
+    if (!editing) return
+    setForm({
+      name: editing.name ?? '',
+      type: editing.type ?? 'bar',
+      address: editing.address ?? '',
+      latitude: editing.latitude != null ? String(editing.latitude) : '',
+      longitude: editing.longitude != null ? String(editing.longitude) : '',
+      phone: editing.phone ?? '',
+      website: editing.website ?? '',
+      description: editing.description ?? '',
+    })
+  }, [editing?.id])
 
   useEffect(() => {
-    if (selectedLocation) {
+    if (selectedLocation && isValidLngLat(selectedLocation.lat, selectedLocation.lng)) {
       setForm((prev) => ({
         ...prev,
         latitude: String(selectedLocation.lat),
@@ -63,27 +86,29 @@ export default function AdminAddPlace({ selectedLocation }: Props) {
     if (!form.name.trim()) { setMessage({ ok: false, text: 'Name is required.' }); return }
     if (!form.address.trim()) { setMessage({ ok: false, text: 'Address is required.' }); return }
     if (isNaN(lat) || isNaN(lng)) { setMessage({ ok: false, text: 'Latitude and longitude must be valid numbers.' }); return }
+    if (!isValidLngLat(lat, lng)) { setMessage({ ok: false, text: 'Coordinates out of range. Latitude must be in [-90, 90], longitude in [-180, 180].' }); return }
 
     setSaving(true)
     try {
-      const place = {
-        id: crypto.randomUUID(),
+      const place: Place = {
+        id: editing?.id ?? crypto.randomUUID(),
         name: form.name.trim(),
         type: form.type,
         address: form.address.trim(),
         latitude: lat,
         longitude: lng,
         description: form.description.trim() || null,
-        photo_url: null,
+        photo_url: editing?.photo_url ?? null,
         phone: form.phone.trim() || null,
         website: form.website.trim() || null,
-        created_at: new Date().toISOString(),
+        created_at: editing?.created_at ?? new Date().toISOString(),
       }
 
       await batchUpsertPlaces([place])
 
-      setMessage({ ok: true, text: `"${place.name}" added.` })
-      setForm(emptyForm)
+      setMessage({ ok: true, text: isEditing ? `"${place.name}" updated.` : `"${place.name}" added.` })
+      if (!isEditing) setForm(emptyForm)
+      onSaved?.()
     } catch (e) {
       setMessage({ ok: false, text: `Failed: ${(e as Error).message}` })
     } finally {
@@ -91,9 +116,33 @@ export default function AdminAddPlace({ selectedLocation }: Props) {
     }
   }
 
+  async function handleDelete() {
+    if (!editing) return
+    if (!window.confirm(`Delete "${editing.name}"? This cannot be undone.`)) return
+    setSaving(true)
+    setMessage(null)
+    try {
+      const result = await deletePlaceInSupabase(editing.id)
+      if (!result.ok) {
+        if (result.code === '23503') {
+          setMessage({ ok: false, text: t('admin.delete_place_in_use', lang) })
+        } else {
+          setMessage({ ok: false, text: `${t('admin.delete_place_failed', lang)}: ${result.error}` })
+        }
+        return
+      }
+      setMessage({ ok: true, text: `"${editing.name}" deleted.` })
+      onDeleted?.()
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-      <h3 className="font-semibold text-lg mb-2 dark:text-white">{t('admin.add_place_title', lang)}</h3>
+      <h3 className="font-semibold text-lg mb-2 dark:text-white">
+        {isEditing ? t('admin.edit_place', lang) : t('admin.add_place_title', lang)}
+      </h3>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         {t('admin.add_place_desc', lang)}
       </p>
@@ -213,8 +262,19 @@ export default function AdminAddPlace({ selectedLocation }: Props) {
           disabled={saving}
           className="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white disabled:text-gray-500 rounded-xl font-medium text-sm transition-colors"
         >
-          {saving ? t('admin.add_saving', lang) : t('admin.add_btn', lang)}
+          {saving ? t('admin.add_saving', lang) : isEditing ? t('admin.save_btn', lang) : t('admin.add_btn', lang)}
         </button>
+
+        {isEditing && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={saving}
+            className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white disabled:text-gray-500 rounded-xl font-medium text-sm transition-colors"
+          >
+            {t('admin.delete_place', lang)}
+          </button>
+        )}
 
         {message && (
           <div className={`text-sm ${message.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>

@@ -3,6 +3,7 @@ import Map, { Layer, Marker, NavigationControl, Source, type MapRef } from 'reac
 import { searchGeoapifyPlaces } from '../lib/geoapify'
 import { getOverpassPlaces, overpassToPlace } from '../lib/overpass'
 import { batchUpsertPlaces } from '../lib/places'
+import { isValidLngLat } from '../lib/location'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
 const token = import.meta.env.VITE_MAPBOX_TOKEN
@@ -56,6 +57,11 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords
+        if (!isValidLngLat(latitude, longitude)) {
+          // Garbage coordinates from the GPS — fall back to default
+          setViewState(DEFAULT_VIEW)
+          return
+        }
         setPoint({ lat: latitude, lng: longitude })
         setViewState({ longitude, latitude, zoom: 14 })
       },
@@ -74,8 +80,10 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords
-        setPoint({ lat: latitude, lng: longitude })
-        mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 14, duration: 1000 })
+        if (isValidLngLat(latitude, longitude)) {
+          setPoint({ lat: latitude, lng: longitude })
+          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 14, duration: 1000 })
+        }
         setLocating(false)
       },
       (err) => {
@@ -87,7 +95,7 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
   }
 
   async function handleImport() {
-    if (!point) return
+    if (!point || !isValidLngLat(point.lat, point.lng)) return
     setImporting(true)
     setResult(null)
     try {
@@ -134,12 +142,14 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
             style={{ width: '100%', height: '100%' }}
             mapStyle="mapbox://styles/mapbox/streets-v12"
             onClick={(e) => {
-              setPoint({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-              setResult(null)
+              if (isValidLngLat(e.lngLat.lat, e.lngLat.lng)) {
+                setPoint({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+                setResult(null)
+              }
             }}
           >
             <NavigationControl position="top-right" />
-            {point && (
+            {point && isValidLngLat(point.lat, point.lng) && (
               <>
                 <Source id="import-radius-circle" type="geojson" data={circleGeoJSON(point, IMPORT_RADIUS_M)}>
                   <Layer

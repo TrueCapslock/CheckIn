@@ -292,6 +292,29 @@ export async function batchUpsertPlaces(places: Place[]): Promise<void> {
   if (error) console.warn('Batch upsert failed:', error)
 }
 
+/**
+ * Delete a place from Supabase and purge it from the local list cache.
+ * Returns a discriminated result so the caller can surface a useful message
+ * (e.g., 23503 = foreign key violation when the place has check-ins).
+ */
+export async function deletePlaceInSupabase(id: string): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
+  if (!hasSupabaseEnv()) return { ok: false, error: 'No Supabase configured' }
+  const supabase = await getClient()
+  const { error } = await supabase.from('places').delete().eq('id', id)
+  // Purge from local list cache regardless of DB outcome so the UI stays consistent
+  try {
+    const raw = localStorage.getItem(PLACES_LIST_CACHE_KEY)
+    if (raw) {
+      const list = JSON.parse(raw) as Place[]
+      const filtered = list.filter((p) => p.id !== id)
+      localStorage.setItem(PLACES_LIST_CACHE_KEY, JSON.stringify(filtered))
+    }
+  } catch { /* ignore */ }
+  if (!error) return { ok: true }
+  if (error.code === '23503') return { ok: false, error: 'place_has_checkins', code: '23503' }
+  return { ok: false, error: error.message, code: error.code }
+}
+
 export interface CheckInResult {
   ok: boolean
   reason?: string
