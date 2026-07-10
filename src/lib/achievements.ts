@@ -28,6 +28,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'first_park', title: 'Green Thumb', description: 'Check in at a park', icon: '🌳', coins: 15 },
   { id: 'first_things_to_do', title: 'Tourist', description: 'Check in at a tourist attraction', icon: '🎪', coins: 15 },
   { id: 'first_hotel', title: 'First Stay', description: 'Check in at a hotel', icon: '🏨', coins: 15 },
+  { id: 'hotel_5', title: 'Hotel Hopper', description: 'Visit 5 unique hotels', icon: '🛏️', coins: 100 },
+  { id: 'hotel_10', title: 'Roamer', description: 'Visit 10 unique hotels', icon: '🧳', coins: 200 },
+  { id: 'hotel_25', title: 'Hotel Tycoon', description: 'Visit 25 unique hotels', icon: '🛎️', coins: 500 },
   { id: 'first_city', title: 'Explorer', description: 'Visit your first city', icon: '🏙️', coins: 25 },
   { id: 'city_5', title: 'Traveler', description: 'Visit 5 unique cities', icon: '🗺️', coins: 100 },
   { id: 'city_10', title: 'Globetrotter', description: 'Visit 10 unique cities', icon: '🌎', coins: 200 },
@@ -239,9 +242,12 @@ export async function checkAchievements(placeId: string, placeType: string, user
   // Look up each Place once (prefer local cache to avoid hammering Supabase) and
   // parse city/country from its Nominatim-style address. Count unique values
   // across all of the user's check-ins plus the current place.
+  // For hotels, count unique place_ids (not unique names) — re-visiting the same
+  // hotel should not advance the tier; each hotel is one unit of progress.
   const uniquePlaceIds = Array.from(new Set([...mine.map((ci) => ci.place_id), placeId]))
   const cities = new Set<string>()
   const countries = new Set<string>()
+  const hotelPlaces = new Set<string>()
 
   for (const pid of uniquePlaceIds) {
     let place = getCachedPlace(pid)
@@ -252,6 +258,7 @@ export async function checkAchievements(placeId: string, placeType: string, user
     const { city, country } = parsePlaceAddress(place.address)
     if (city) cities.add(city)
     if (country) countries.add(country)
+    if (place.type === 'hotel') hotelPlaces.add(pid)
   }
 
   if (cities.size >= 1) unlock('first_city')
@@ -263,6 +270,13 @@ export async function checkAchievements(placeId: string, placeType: string, user
   if (countries.size >= 5) unlock('country_5')
   if (countries.size >= 10) unlock('country_10')
   if (countries.size >= 25) unlock('country_25')
+
+  // first_hotel is already unlocked by the generic `first_${placeType}` block above;
+  // the tiered hotel_X achievements count unique hotel place_ids (so a user visiting
+  // the same hotel 25 times doesn't trivially unlock hotel_25).
+  if (hotelPlaces.size >= 5) unlock('hotel_5')
+  if (hotelPlaces.size >= 10) unlock('hotel_10')
+  if (hotelPlaces.size >= 25) unlock('hotel_25')
 
   saveAchievements(state)
   return justUnlocked
