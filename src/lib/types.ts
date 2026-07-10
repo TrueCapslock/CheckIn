@@ -59,3 +59,11 @@ export interface PartyActivity {
   data: Record<string, unknown>
   created_at: string
 }
+
+export interface Rating {
+  id: string
+  place_id: string
+  user_name: string
+  rating: number // 1-5 stars
+  created_at: string
+}

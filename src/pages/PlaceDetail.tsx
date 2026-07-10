@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Map, { Marker } from 'react-map-gl/mapbox'
 import type { Place, CheckIn } from '../lib/types'
@@ -6,7 +6,9 @@ import { getCategoryIcon } from '../lib/categories'
 import { getPlace, getCheckInsForPlace, getCheckInCount, createCheckIn, getAllCheckIns } from '../lib/places'
 import type { CheckInResult } from '../lib/places'
 import { getUsername } from '../lib/user'
-import { followUser, unfollowUser, isFollowing } from '../lib/follow'
+import { followUser, unfollowUser, isFollowing, getFollowing } from '../lib/follow'
+import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating, filterRatingsToSelfAndFriends } from '../lib/ratings'
+import type { Rating } from '../lib/types'
 import { getMayorFromCheckIns } from '../lib/points'
 import { getPlacePhotos, addPlacePhoto } from '../lib/place-photos'
 import type { PlacePhoto } from '../lib/place-photos'
@@ -34,6 +36,29 @@ function PriceLevel({ level }: { level: number }) {
   return <span className="text-green-600 dark:text-green-400 text-sm">{'$'.repeat(level)}</span>
 }
 
+function RateStars({ value, onChange, disabled }: { value: number; onChange: (n: number) => void; disabled?: boolean }) {
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button
+          key={i}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(i)}
+          aria-label={`${i} star`}
+          className={`text-2xl leading-none transition-colors disabled:opacity-50 ${
+            i <= value
+              ? 'text-amber-500 dark:text-amber-400'
+              : 'text-gray-300 dark:text-gray-600 hover:text-amber-300 disabled:hover:text-gray-300'
+          }`}
+        >
+          {i <= value ? '★' : '☆'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function PlaceDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -52,10 +77,20 @@ export default function PlaceDetail() {
   const [placePhotos, setPlacePhotos] = useState<PlacePhoto[]>([])
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
   const photoRef = useRef<HTMLInputElement>(null)
+  const [myRating, setMyRating] = useState<Rating | null>(null)
+  const [allRatings, setAllRatings] = useState<Rating[]>([])
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratingError, setRatingError] = useState<string | null>(null)
+  const [followingNames, setFollowingNames] = useState<string[]>(getFollowing())
 
   const userName = getUsername() || 'Anonymous'
   const { lang } = useLanguage()
   const { location: userLocation } = useUserLocation()
+  const communityAvg = getAverageRating(allRatings)
+  const visibleRatings = useMemo(
+    () => filterRatingsToSelfAndFriends(allRatings, userName, followingNames),
+    [allRatings, userName, followingNames],
+  )
 
   useEffect(() => {
     if (!id) return
@@ -69,6 +104,11 @@ export default function PlaceDetail() {
       setLoading(false)
     })
   }, [id])
+
+  useEffect(() => {
+    void loadRatings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, userName])
 
   useEffect(() => {
     if (!id) return
@@ -123,10 +163,46 @@ export default function PlaceDetail() {
   const handleFollow = async (name: string) => {
     if (isFollowing(name)) {
       await unfollowUser(name)
+      setFollowingNames((prev) => prev.filter((n) => n !== name))
     } else {
       await followUser(name)
+      setFollowingNames((prev) => [...prev, name])
     }
     setRerender((n) => n + 1)
+  }
+
+  const handleSubmitRating = async (stars: number) => {
+    if (!id || submittingRating) return
+    setSubmittingRating(true)
+    setRatingError(null)
+    const optimistic: Rating = {
+      id: `local-${crypto.randomUUID()}`,
+      place_id: id,
+      user_name: userName,
+      rating: stars,
+      created_at: new Date().toISOString(),
+    }
+    setMyRating(optimistic)
+    setAllRatings((prev) => {
+      const without = prev.filter((r) => r.user_name !== userName)
+      return [optimistic, ...without]
+    })
+    const res = await submitRating(id, userName, stars)
+    setSubmittingRating(false)
+    if (!res.ok) {
+      setRatingError(res.error ?? null)
+      return
+    }
+  }
+
+  async function loadRatings() {
+    if (!id) return
+    const [all, mine] = await Promise.all([
+      getRatingsForPlace(id),
+      getMyRatingForPlace(id, userName),
+    ])
+    setAllRatings(all)
+    setMyRating(mine)
   }
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -217,17 +293,40 @@ export default function PlaceDetail() {
             </div>
           </div>
 
-          {/* Google ratings */}
-          {(place.rating || place.priceLevel) && (
-            <div className="flex items-center gap-3 mt-2">
+          {/* Google ratings + community avg + interactive rate-this */}
+          {(place.rating || place.priceLevel || communityAvg) && (
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
               {place.rating && (
                 <div className="flex items-center gap-1">
                   <Stars rating={place.rating} />
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{place.rating}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{place.rating.toFixed(1)} · Google</span>
                 </div>
               )}
               {place.priceLevel && <PriceLevel level={place.priceLevel} />}
+              {communityAvg && (
+                <div className="flex items-center gap-1">
+                  <Stars rating={communityAvg.avg} />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {communityAvg.avg.toFixed(1)} · {t('place_detail.community_avg', lang)} ({communityAvg.count})
+                  </span>
+                </div>
+              )}
             </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+            <span className="text-sm text-gray-600 dark:text-gray-400">{t('place_detail.rate_this', lang)}</span>
+            <RateStars
+              value={myRating?.rating ?? 0}
+              onChange={(v) => void handleSubmitRating(v)}
+              disabled={submittingRating}
+            />
+            {submittingRating && (
+              <span className="text-xs text-gray-400">{t('place_detail.submitting_rating', lang)}</span>
+            )}
+          </div>
+          {ratingError && (
+            <div className="mt-2 text-xs text-red-500">{t('place_detail.ratings_table_missing', lang)}</div>
           )}
 
           <p className="text-gray-600 dark:text-gray-400 text-sm flex items-center gap-1 mt-2">
@@ -316,6 +415,50 @@ export default function PlaceDetail() {
                       {new Date(ci.created_at).toLocaleDateString('en-US', {
                         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                       })}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* User + friends ratings (rendered just below Recent Check-ins) */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-semibold dark:text-white">{t('place_detail.ratings_section', lang)}</h2>
+            {visibleRatings.length > 0 && (
+              <span className="text-xs text-gray-400">{t('place_detail.ratings_count', lang).replace('{count}', String(visibleRatings.length))}</span>
+            )}
+          </div>
+          {visibleRatings.length === 0 ? (
+            <p className="text-gray-400 text-sm">{t('place_detail.no_ratings_yet', lang)}</p>
+          ) : (
+            <div className="space-y-2">
+              {visibleRatings.slice(0, 10).map((r) => {
+                const following = isFollowing(r.user_name)
+                const isMe = r.user_name === userName
+                return (
+                  <div key={r.id} className="flex items-center gap-2 text-sm">
+                    <span className="w-6 h-6 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0">
+                      {r.user_name[0].toUpperCase()}
+                    </span>
+                    <Link to={`/user/${encodeURIComponent(r.user_name)}`} className="font-medium dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400">
+                      {isMe ? t('friends.you', lang) : r.user_name}
+                    </Link>
+                    <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
+                      <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
+                    </span>
+                    {r.user_name !== userName && (
+                      <button
+                        onClick={() => handleFollow(r.user_name)}
+                        className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                      >
+                        {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
+                      </button>
+                    )}
+                    <span className="text-gray-400 text-xs">
+                      {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
                 )
