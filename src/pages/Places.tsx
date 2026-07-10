@@ -70,7 +70,6 @@ export default function Places() {
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'list' | 'map' | 'add'>('list')
   const [sort, setSort] = useState<'name' | 'distance'>('distance')
-  const [priceFilter, setPriceFilter] = useState<number | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const { location, loading: locLoading } = useUserLocation()
   const { lang } = useLanguage()
@@ -111,11 +110,6 @@ export default function Places() {
 
   const sortedPlaces = useMemo(() => {
     let out = [...places]
-    if (priceFilter !== null) {
-      // When a specific price level is selected, hide places with no price data
-      // (user asked for $$-tier; null priceLevel is unknown and not $-tier).
-      out = out.filter((p) => p.priceLevel === priceFilter)
-    }
     if (sort === 'name') {
       out.sort((a, b) => a.name.localeCompare(b.name))
     } else if (location) {
@@ -130,7 +124,7 @@ export default function Places() {
       })
     }
     return out
-  }, [places, sort, location, priceFilter])
+  }, [places, sort, location])
 
   const rowProps = useMemo<PlaceRowProps>(() => ({ places: sortedPlaces, location }), [sortedPlaces, location])
 
@@ -170,31 +164,7 @@ export default function Places() {
           ))}
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 mt-2">
-          <button
-            onClick={() => setPriceFilter(null)}
-            className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium ${
-              priceFilter === null ? 'bg-[var(--ci-mint)] text-emerald-950' : 'bg-[var(--ci-muted-surface)] text-[var(--ci-muted)]'
-            }`}
-          >
-            {t('places.price_any', lang)}
-          </button>
-          {[1, 2, 3, 4].map((level) => (
-            <button
-              key={level}
-              onClick={() => setPriceFilter(level)}
-              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium text-green-700 dark:text-green-300 ${
-                priceFilter === level
-                  ? 'bg-green-100 dark:bg-green-900/30 ring-2 ring-green-500 dark:ring-green-400'
-                  : 'bg-[var(--ci-muted-surface)]'
-              }`}
-            >
-              {'$'.repeat(level)}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-1 mt-3 bg-[var(--ci-muted-surface)] rounded-lg p-1 text-[var(--ci-text)]">
+        <div className="flex gap-1 mt-2 bg-[var(--ci-muted-surface)] rounded-lg p-1 text-[var(--ci-text)]">
           <button
             onClick={() => setView('list')}
             className={`flex-1 py-1.5 text-sm font-medium rounded-md ${

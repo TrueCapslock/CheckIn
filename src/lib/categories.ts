@@ -8,8 +8,8 @@ export interface Category {
   google_query: string
 }
 
-const CACHE_KEY = 'checkin_categories'
-const CACHE_TIME_KEY = 'checkin_categories_ts'
+const CACHE_KEY = 'checkin_categories_v2'
+const CACHE_TIME_KEY = 'checkin_categories_ts_v2'
 const CACHE_TTL = 1000 * 60 * 60 // 1 hour
 
 const FALLBACK_CATEGORIES: Category[] = [
@@ -53,6 +53,21 @@ function saveCache(cats: Category[]) {
   } catch { /* ignore */ }
 }
 
+/**
+ * Merge FALLBACK_CATEGORIES with remote (Supabase) entries.
+ *
+ * FALLBACK_CATEGORIES is authoritative for known ids — every entry defined there
+ * wins outright, so icon/sort_order updates in code propagate to all clients.
+ * Remote entries whose id is NOT in FALLBACK are preserved (admin-created
+ * categories). Result is re-sorted by sort_order.
+ */
+function mergeWithFallback(remote: Category[]): Category[] {
+  const byId = new Map<string, Category>()
+  for (const fb of FALLBACK_CATEGORIES) byId.set(fb.id, fb)
+  for (const cat of remote) if (!byId.has(cat.id)) byId.set(cat.id, cat)
+  return Array.from(byId.values()).sort((a, b) => a.sort_order - b.sort_order)
+}
+
 let cached: Category[] | null = null
 
 /** Get categories — returns cached data or fallback. Call loadCategories() first to populate from Supabase. */
@@ -77,7 +92,7 @@ export async function loadCategories(): Promise<Category[]> {
     const { supabase } = await import('./supabase')
     const { data, error } = await supabase.from('categories').select('*').order('sort_order')
     if (!error && data && data.length > 0) {
-      cached = data as Category[]
+      cached = mergeWithFallback(data as Category[])
       saveCache(cached)
       return cached
     }

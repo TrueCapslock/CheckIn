@@ -70,7 +70,6 @@ const translations: Translations = {
     'places.try_refresh': 'Try refreshing the page or check your network connection.',
     'places.getting_location': 'Getting your location...',
     'places.no_places': 'No places found.',
-    'places.price_any': 'Any price',
 
     'place_detail.not_found': 'Place not found.',
     'place_detail.checkins_label': 'check-ins',
@@ -439,7 +438,6 @@ const translations: Translations = {
     'places.try_refresh': 'Prøv å oppdatere siden eller sjekk nettverkstilkoblingen.',
     'places.getting_location': 'Henter posisjonen din...',
     'places.no_places': 'Ingen steder funnet.',
-    'places.price_any': 'Uansett pris',
 
     'place_detail.not_found': 'Fant ikke stedet.',
     'place_detail.checkins_label': 'innsjekkinger',
