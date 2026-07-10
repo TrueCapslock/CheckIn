@@ -18,7 +18,7 @@ const FALLBACK_CATEGORIES: Category[] = [
   { id: 'cafe', name: 'Cafe', icon: '☕', sort_order: 3, google_query: 'cafes' },
   { id: 'club', name: 'Club', icon: '🎵', sort_order: 4, google_query: 'night clubs' },
   { id: 'lounge', name: 'Lounge', icon: '🥂', sort_order: 5, google_query: 'lounges' },  { id: 'park', name: 'Park', icon: '🌳', sort_order: 6, google_query: 'parks' },
-  { id: 'hotel', name: 'Hotel', icon: '🏨', sort_order: 7, google_query: 'hotels' },
+  { id: 'hotel', name: 'Hotel', icon: '🏢', sort_order: 7, google_query: 'hotels' },
   { id: 'things_to_do', name: 'Things to Do', icon: '🎪', sort_order: 8, google_query: 'things to do' },
 ] 
 
