@@ -74,7 +74,8 @@ export default function PartyCreate() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* On md+, fit name + start + end in a single horizontal row. */}
+        <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-[2fr_1fr_1fr] md:gap-3">
           <div>
             <label className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t('party_create.start', lang)}</label>
             <input

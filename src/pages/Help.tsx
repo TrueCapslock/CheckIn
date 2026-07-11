@@ -104,7 +104,7 @@ export default function Help() {
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{t('help.description', lang)}</p>
       </div>
 
-      <div className="flex-1 px-4 pb-20 overflow-y-auto space-y-3">
+      <div className="flex-1 px-4 pb-20 overflow-y-auto space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
         {sections.map((s) => (
           <div
             key={s.title}

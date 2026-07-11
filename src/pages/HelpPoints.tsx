@@ -69,7 +69,9 @@ export default function HelpPoints() {
         {/* Upgrade costs */}
         <div className="rounded-2xl bg-[var(--ci-panel)] border border-[var(--ci-border)] px-4 py-3">
           <h3 className="text-sm font-semibold text-[var(--ci-text)] mb-3">{T('upgrade_costs')}</h3>
-          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+          {/* On md+, render each tier as its own horizontal card so the row
+              is legible instead of a cramped 3-col min/max grid. */}
+          <div className="grid grid-cols-3 gap-2 text-center text-sm md:hidden">
             <div className="text-xs font-semibold text-[var(--ci-muted)]">{T('level')}</div>
             <div className="text-xs font-semibold text-[var(--ci-muted)]">{T('multiplier')}</div>
             <div className="text-xs font-semibold text-[var(--ci-muted)]">{T('cost')}</div>
@@ -78,6 +80,20 @@ export default function HelpPoints() {
                 <div className="font-medium text-[var(--ci-text)]">{i}</div>
                 <div className="font-bold text-emerald-400">{mul}×</div>
                 <div className="text-[var(--ci-muted)]">{i === 0 ? '—' : `${STICKER_COSTS[i]} 🪙`}</div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:grid md:grid-cols-5 md:gap-3">
+            {MULTIPLIERS.map((mul, i) => (
+              <div
+                key={i}
+                className={`rounded-xl border border-[var(--ci-border)] bg-[var(--ci-muted-surface)] px-3 py-3 text-center transition-colors ${
+                  i === 0 ? 'opacity-60' : 'hover:border-emerald-300'
+                }`}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ci-muted)]">{T('level')} {i}</div>
+                <div className="my-1 text-lg font-black text-emerald-400">{mul}×</div>
+                <div className="text-xs font-semibold text-[var(--ci-text)]">{i === 0 ? '—' : `${STICKER_COSTS[i]} 🪙`}</div>
               </div>
             ))}
           </div>

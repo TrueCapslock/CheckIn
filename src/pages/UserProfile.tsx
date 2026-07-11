@@ -118,7 +118,9 @@ export default function UserProfile() {
           )
         })()}
 
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        {/* 2×2 on phones; single horizontal row of 4 at md+ to use the
+            wider iPad shell without making each card too wide. */}
+        <div className="grid grid-cols-2 gap-2 mb-4 md:grid-cols-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-center">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalCheckIns}</div>
             <div className="text-xs text-gray-500 dark:text-gray-400">{t('user_profile.checkins', lang)}</div>

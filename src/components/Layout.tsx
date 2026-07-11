@@ -96,13 +96,16 @@ export default function Layout() {
   }, [])
 
   return (
-    <div className="app-shell max-w-lg mx-auto min-h-svh flex flex-col overflow-hidden sm:my-5 sm:min-h-[calc(100svh-2.5rem)] sm:rounded-[2rem]">
+    // Responsive shell (mobile-first: full-bleed at <sm, then progressively
+    // wider at sm/md/lg/xl). The bottom nav mirrors the same width chain so
+    // they stay visually glued to the edge of the floating "phone" on iPad.
+    <div className="app-shell max-w-md sm:max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto min-h-svh flex flex-col overflow-hidden sm:my-5 sm:min-h-[calc(100svh-2.5rem)] md:my-6 md:min-h-[calc(100svh-3rem)] md:rounded-[2.5rem] sm:rounded-[2rem]">
       <PullToRefresh />
       <main className="app-content flex min-h-0 flex-1 flex-col overflow-hidden pb-[4.5rem]">
         <Outlet />
       </main>
 
-      <nav className="app-bottom-nav fixed bottom-0 left-1/2 z-30 flex w-full -translate-x-1/2 border-t px-3 pb-1 pt-1">
+      <nav className="app-bottom-nav fixed bottom-0 sm:bottom-5 md:bottom-6 left-1/2 z-30 flex w-full max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl -translate-x-1/2 sm:rounded-b-[2rem] md:rounded-b-[2.5rem] border-t px-3 pb-1 pt-1">
         {tabs.map((tab) => (
           <NavLink
             key={tab.label}

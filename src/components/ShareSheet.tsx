@@ -27,9 +27,14 @@ export default function ShareSheet({ placeId, placeName, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={onClose}>
+    // md+: render as a centered modal (matches iOS share-sheet on iPad).
+    // Mobile: bottom sheet (full-width, rounded-top corners only).
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-end md:items-center md:justify-center"
+      onClick={onClose}
+    >
       <div
-        className="bg-white rounded-t-2xl w-full p-6 pb-10"
+        className="bg-white rounded-t-2xl w-full p-6 pb-10 md:rounded-2xl md:max-w-sm md:pb-6 md:mx-4 md:my-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4" />

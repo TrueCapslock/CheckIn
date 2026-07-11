@@ -56,7 +56,7 @@ export default function PartyInvites() {
             <p className="text-gray-400">{t('party_invites.empty', lang)}</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {invites.map((party) => (
               <div
                 key={party.id}

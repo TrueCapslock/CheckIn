@@ -341,8 +341,8 @@ button, a {
 }
 
 .ci-splash-icon {
-  width: min(46vw, 220px);
-  height: min(46vw, 220px);
+  width: min(35vw, 280px);
+  height: min(35vw, 280px);
   object-fit: contain;
   filter: drop-shadow(0 28px 34px rgba(6, 42, 39, 0.18));
   animation: ci-splash-pop 700ms cubic-bezier(.2,.8,.2,1) both;

@@ -283,8 +283,11 @@ export default function PlaceDetail() {
         </div>
       )}
 
-      <div className="px-4 mt-2">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl pt-6 p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+      {/* Two-column layout from lg+ (≥1024px viewport, iPad landscape).
+          Left = details card + map. Right = recent check-ins + ratings list
+          (sticky). Below lg, children stack normally. */}
+      <div className="px-4 mt-2 lg:grid lg:grid-cols-[1fr_320px] lg:gap-6 lg:items-start">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl pt-6 p-4 shadow-sm border border-gray-100 dark:border-gray-700 min-w-0">
           <div className="flex items-start justify-between mb-2">
             <div>
               <h1 className="text-2xl font-bold dark:text-white">{place.name}</h1>
@@ -396,7 +399,8 @@ export default function PlaceDetail() {
           )}
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mt-4">
+        {/* Right column at lg+ (sticky); below lg, just a normal mt-4 section. */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mt-4 lg:mt-0 lg:sticky lg:top-6 min-w-0">
           <h2 className="font-semibold mb-2 dark:text-white">{t('place_detail.recent_checkins', lang)}</h2>
           {recentCheckIns.length === 0 ? (
             <p className="text-gray-400 text-sm">{t('place_detail.no_checkins_yet', lang)}</p>
@@ -430,8 +434,8 @@ export default function PlaceDetail() {
           )}
         </div>
 
-        {/* User + friends ratings (rendered just below Recent Check-ins) */}
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mt-4">
+        {/* User + friends ratings — sits inside the right column at lg+. */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mt-4 lg:mt-3 min-w-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-semibold dark:text-white">{t('place_detail.ratings_section', lang)}</h2>
             {visibleRatings.length > 0 && (
@@ -475,7 +479,10 @@ export default function PlaceDetail() {
         </div>
       </div>
 
-      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 pb-3 space-y-2">
+      {/* Bottom action stack (check-in button + toasts). Mirrors the shell
+          width chain so it stays centered with the floating card on iPad. */}
+      <div className="fixed bottom-16 sm:bottom-[5.25rem] md:bottom-[6.25rem] left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl px-4 pb-3 pointer-events-none">
+        <div className="space-y-2 pointer-events-auto">
         {/* Too far error toast */}
         {farError && (
           <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-2xl px-4 py-3 text-center animate-bounce shadow-lg">
@@ -544,6 +551,7 @@ export default function PlaceDetail() {
         >
           {checkedIn ? t('place_detail.checked_in_as', lang).replace('{name}', userName) : t('place_detail.check_in', lang)}
         </button>
+        </div>
       </div>
 
       {showShare && place && (
