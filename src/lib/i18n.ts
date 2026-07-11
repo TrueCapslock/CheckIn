@@ -98,6 +98,9 @@ const translations: Translations = {
     'place_detail.no_ratings_yet': 'No ratings from you or friends yet.',
     'place_detail.submitting_rating': 'Saving…',
     'place_detail.ratings_table_missing': 'Ratings table not set up. Run the SETUP_RATINGS.sql migration in Supabase.',
+    'place_detail.prev': 'Prev',
+    'place_detail.next': 'Next',
+    'place_detail.page_of': 'Page {page} of {total}',
 
     'friends.title': 'Friends',
     'friends.description': 'Find people and manage who you follow.',
@@ -506,6 +509,9 @@ const translations: Translations = {
     'place_detail.no_ratings_yet': 'Ingen vurderinger fra deg eller venner ennå.',
     'place_detail.submitting_rating': 'Lagrer…',
     'place_detail.ratings_table_missing': 'Vurderingstabell ikke satt opp. Kjør SETUP_RATINGS.sql i Supabase.',
+    'place_detail.prev': 'Forrige',
+    'place_detail.next': 'Neste',
+    'place_detail.page_of': 'Side {page} av {total}',
 
     'friends.title': 'Venner',
     'friends.description': 'Finn personer og administrer hvem du følger.',

@@ -61,6 +61,28 @@ export function getAverageRating(ratings: Rating[] | null | undefined): RatingSt
   return { avg: sum / ratings.length, count: ratings.length }
 }
 
+/** Slice of one page of ratings + metadata. `page` is 0-indexed and is
+ *  clamped into [0, totalPages-1], so out-of-range callers cannot read past
+ *  the end of the list. An empty list still reports `totalPages = 1` so the
+ *  UI can render "Page 1 of 1" without a divide-by-zero edge case. */
+export function paginateRatings(
+  ratings: Rating[],
+  page: number,
+  pageSize: number,
+): { items: Rating[]; page: number; totalPages: number; total: number; pageSize: number } {
+  const total = ratings.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const safePage = Math.min(Math.max(0, page), totalPages - 1)
+  const start = safePage * pageSize
+  return {
+    items: ratings.slice(start, start + pageSize),
+    page: safePage,
+    totalPages,
+    total,
+    pageSize,
+  }
+}
+
 /**
  * Pure helper: drop entries that aren't authored by `userName` or any name in
  * `friendSet`. Used by the PlaceDetail UI to render only the "self + friends"

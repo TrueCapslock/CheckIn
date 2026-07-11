@@ -7,7 +7,7 @@ import { getPlace, getCheckInsForPlace, getCheckInCount, createCheckIn, getAllCh
 import type { CheckInResult } from '../lib/places'
 import { getUsername } from '../lib/user'
 import { followUser, unfollowUser, isFollowing } from '../lib/follow'
-import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating } from '../lib/ratings'
+import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating, paginateRatings } from '../lib/ratings'
 import type { Rating } from '../lib/types'
 import { getMayorFromCheckIns } from '../lib/points'
 import { getPlacePhotos, addPlacePhoto } from '../lib/place-photos'
@@ -81,6 +81,8 @@ export default function PlaceDetail() {
   const [allRatings, setAllRatings] = useState<Rating[]>([])
   const [submittingRating, setSubmittingRating] = useState(false)
   const [ratingError, setRatingError] = useState<string | null>(null)
+  const RATINGS_PAGE_SIZE = 10
+  const [ratingsPage, setRatingsPage] = useState(0)
 
 
   const userName = getUsername() || 'Anonymous'
@@ -89,6 +91,7 @@ export default function PlaceDetail() {
   const communityAvg = getAverageRating(allRatings)
   // Show every rating to every visitor, not just self + friends.
   const visibleRatings = allRatings
+  const pagination = paginateRatings(visibleRatings, ratingsPage, RATINGS_PAGE_SIZE)
 
   useEffect(() => {
     if (!id) return
@@ -107,6 +110,13 @@ export default function PlaceDetail() {
     void loadRatings()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, userName])
+
+  // Reset to the first page whenever the place (id) changes; the underlying
+  // list size is the same set unless the place itself changes, so we don't
+  // bounce the user back to page 0 just because someone submitted a new rating.
+  useEffect(() => {
+    setRatingsPage(0)
+  }, [id])
 
   useEffect(() => {
     if (!id) return
@@ -441,36 +451,65 @@ export default function PlaceDetail() {
           {visibleRatings.length === 0 ? (
             <p className="text-gray-400 text-sm">{t('place_detail.no_ratings_yet', lang)}</p>
           ) : (
-            <div className="space-y-2">
-              {visibleRatings.slice(0, 10).map((r) => {
-                const following = isFollowing(r.user_name)
-                const isMe = r.user_name === userName
-                return (
-                  <div key={r.id} className="flex items-center gap-2 text-sm">
-                    <span className="w-6 h-6 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0">
-                      {r.user_name[0].toUpperCase()}
-                    </span>
-                    <Link to={`/user/${encodeURIComponent(r.user_name)}`} className="font-medium dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400">
-                      {isMe ? t('friends.you', lang) : r.user_name}
-                    </Link>
-                    <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
-                      <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
-                    </span>
-                    {r.user_name !== userName && (
-                      <button
-                        onClick={() => handleFollow(r.user_name)}
-                        className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
-                      >
-                        {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
-                      </button>
-                    )}
-                    <span className="text-gray-400 text-xs">
-                      {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
+            <>
+              <div className="space-y-2">
+                {pagination.items.map((r) => {
+                  const following = isFollowing(r.user_name)
+                  const isMe = r.user_name === userName
+                  return (
+                    <div key={r.id} className="flex items-center gap-2 text-sm">
+                      <span className="w-6 h-6 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0">
+                        {r.user_name[0].toUpperCase()}
+                      </span>
+                      <Link to={`/user/${encodeURIComponent(r.user_name)}`} className="font-medium dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400">
+                        {isMe ? t('friends.you', lang) : r.user_name}
+                      </Link>
+                      <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
+                        <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
+                      </span>
+                      {r.user_name !== userName && (
+                        <button
+                          onClick={() => handleFollow(r.user_name)}
+                          className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                        >
+                          {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
+                        </button>
+                      )}
+                      <span className="text-gray-400 text-xs">
+                        {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              {pagination.totalPages > 1 && (
+                <div className="mt-3 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <button
+                    type="button"
+                    onClick={() => setRatingsPage((p) => Math.max(0, p - 1))}
+                    disabled={pagination.page === 0}
+                    aria-label={t('place_detail.prev', lang)}
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                  >
+                    ← {t('place_detail.prev', lang)}
+                  </button>
+                  <span className="font-medium whitespace-nowrap">
+                    {t('place_detail.page_of', lang)
+                      .replace('{page}', String(pagination.page + 1))
+                      .replace('{total}', String(pagination.totalPages))}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRatingsPage((p) => Math.min(pagination.totalPages - 1, p + 1))}
+                    disabled={pagination.page >= pagination.totalPages - 1}
+                    aria-label={t('place_detail.next', lang)}
+                    className="px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                  >
+                    {t('place_detail.next', lang)} →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

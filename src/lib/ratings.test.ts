@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Rating } from './types'
-import { getAverageRating, filterRatingsToSelfAndFriends } from './ratings'
+import { getAverageRating, filterRatingsToSelfAndFriends, paginateRatings } from './ratings'
 
 const mkRating = (userName: string, rating: number): Rating => ({
   id: `id-${userName}-${rating}`,
@@ -63,5 +63,64 @@ describe('filterRatingsToSelfAndFriends', () => {
   it('returns [] when no overlap', () => {
     const out = filterRatingsToSelfAndFriends(ratings, 'someone-else', [])
     expect(out).toEqual([])
+  })
+})
+
+describe('paginateRatings', () => {
+  const ratings: Rating[] = Array.from({ length: 25 }, (_, i) => mkRating(`u${i}`, (i % 5) + 1))
+
+  it('returns first page by default', () => {
+    const p = paginateRatings(ratings, 0, 10)
+    expect(p.items.map((r) => r.user_name)).toEqual(['u0','u1','u2','u3','u4','u5','u6','u7','u8','u9'])
+    expect(p.total).toBe(25)
+    expect(p.pageSize).toBe(10)
+    expect(p.totalPages).toBe(3)
+    expect(p.page).toBe(0)
+  })
+
+  it('returns the requested middle page', () => {
+    const p = paginateRatings(ratings, 1, 10)
+    expect(p.items.map((r) => r.user_name)).toEqual(['u10','u11','u12','u13','u14','u15','u16','u17','u18','u19'])
+    expect(p.page).toBe(1)
+  })
+
+  it('returns partial last page', () => {
+    const p = paginateRatings(ratings, 2, 10)
+    expect(p.items.map((r) => r.user_name)).toEqual(['u20','u21','u22','u23','u24'])
+    expect(p.items).toHaveLength(5)
+    expect(p.page).toBe(2)
+  })
+
+  it('clamps a too-high page index back to the last page', () => {
+    const p = paginateRatings(ratings, 99, 10)
+    expect(p.page).toBe(2)
+    expect(p.items).toHaveLength(5)
+  })
+
+  it('clamps a negative page index up to 0', () => {
+    const p = paginateRatings(ratings, -5, 10)
+    expect(p.page).toBe(0)
+    expect(p.items).toHaveLength(10)
+  })
+
+  it('returns empty items + single page for an empty list', () => {
+    const p = paginateRatings([], 0, 10)
+    expect(p.items).toEqual([])
+    expect(p.total).toBe(0)
+    expect(p.totalPages).toBe(1)
+    expect(p.page).toBe(0)
+    expect(p.pageSize).toBe(10)
+  })
+
+  it('honours a custom page size that divides evenly', () => {
+    const p = paginateRatings(ratings, 0, 5)
+    expect(p.totalPages).toBe(5)
+    expect(p.items).toHaveLength(5)
+  })
+
+  it('is a pure function: does not mutate the input', () => {
+    const copy = ratings.slice()
+    paginateRatings(ratings, 1, 10)
+    expect(ratings).toEqual(copy)
   })
 })
