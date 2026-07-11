@@ -1,4 +1,5 @@
 import type { Rating } from './types'
+import type { UnlockResult } from './achievements'
 import { supabase } from './supabase'
 
 const RATINGS_LIMIT = 500
@@ -98,11 +99,44 @@ export function filterRatingsToSelfAndFriends(
 }
 
 /**
+ * Aggregate one user's lifetime rating stats from the place_ratings table.
+ * Returns zeroes on any error or while offline so the achievement check
+ * degrades gracefully. The `UNIQUE(place_id, user_name)` constraint means
+ * `ratings` is the count of distinct places the user has rated.
+ */
+export async function getUserRatingStats(userName: string): Promise<{
+  ratings: number
+  comments: number
+  fiveStars: number
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('place_ratings')
+      .select('rating, comment')
+      .eq('user_name', userName)
+    if (error) {
+      console.warn('Supabase getUserRatingStats failed:', error.message)
+      return { ratings: 0, comments: 0, fiveStars: 0 }
+    }
+    const rows = (data || []) as { rating: number; comment: string | null }[]
+    return {
+      ratings: rows.length,
+      comments: rows.filter((r) => typeof r.comment === 'string' && r.comment.trim() !== '').length,
+      fiveStars: rows.filter((r) => r.rating === 5).length,
+    }
+  } catch (e) {
+    console.warn('getUserRatingStats failed:', e)
+    return { ratings: 0, comments: 0, fiveStars: 0 }
+  }
+}
+
+/**
  * Submit (or update) the current user's rating for a place. An optional
  * free-text `comment` is stored on the same row (NULL when omitted or
  * whitespace-only) and round-trips through the offline queue so a
  * connection blip never loses a typed review.
- *  - Online + Supabase reachable → upserts the row directly.
+ *  - Online + Supabase reachable → upserts the row directly, then fires the
+ *    rating achievement check (best-effort, may return []).
  *  - Offline OR any other transient failure → queues to localStorage for
  *    `processRatingsQueue()` to drain on the next online tick.
  * The expected Supabase schema is:
@@ -115,7 +149,7 @@ export async function submitRating(
   userName: string,
   rating: number,
   comment: string | null = null,
-): Promise<{ ok: boolean; queued: boolean; error?: string }> {
+): Promise<{ ok: boolean; queued: boolean; error?: string; unlocked?: UnlockResult[] }> {
   if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
     return { ok: false, queued: false, error: 'rating must be an integer 1–5' }
   }
@@ -147,7 +181,16 @@ export async function submitRating(
       addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
       return { ok: true, queued: true }
     }
-    return { ok: true, queued: false }
+    // Fire rating achievements (best-effort). Use a dynamic import to avoid a
+    // hard module-level cycle between ratings.ts and achievements.ts.
+    let unlocked: UnlockResult[] = []
+    try {
+      const { checkRatingAchievements } = await import('./achievements')
+      unlocked = await checkRatingAchievements(userName)
+    } catch (e) {
+      console.warn('checkRatingAchievements failed:', e)
+    }
+    return { ok: true, queued: false, unlocked }
   } catch {
     addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
     return { ok: true, queued: true }

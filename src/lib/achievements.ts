@@ -50,6 +50,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'party_checkin_3', title: 'Life of the Party', description: 'Check in at 3 places during one party', icon: '🎊', coins: 50 },
   { id: 'party_attend_5', title: 'Party Animal', description: 'Attend 5 parties', icon: '🐾', coins: 100 },
   { id: 'party_host_3', title: 'Host with the Most', description: 'Host 3 parties', icon: '🎙️', coins: 75 },
+
+  // Rating achievements (multi-tier, see evaluateRatingAchievements)
+  { id: 'first_rating', title: 'First Review', description: 'Rate your first place', icon: '⭐', coins: 10 },
+  { id: 'ratings_5', title: 'Critic', description: 'Rate 5 unique places', icon: '🌟', coins: 25 },
+  { id: 'ratings_25', title: 'Local Guide', description: 'Rate 25 unique places', icon: '💫', coins: 100 },
+  { id: 'ratings_100', title: 'Tastemaker', description: 'Rate 100 unique places', icon: '🏆', coins: 250 },
+  { id: 'first_comment', title: 'Pensmith', description: 'Write your first review comment', icon: '✍️', coins: 15 },
+  { id: 'comments_10', title: 'Columnist', description: 'Write 10 review comments', icon: '📝', coins: 50 },
+  { id: 'comments_50', title: 'Novelist', description: 'Write 50 review comments', icon: '📖', coins: 200 },
+  { id: 'first_five_star', title: 'Highly Recommended', description: 'Give a 5-star rating', icon: '🥇', coins: 10 },
+  { id: 'five_stars_25', title: 'Generous Spirit', description: 'Give 25 5-star ratings', icon: '🎇', coins: 100 },
 ]
 
 /* ───── Progress persistence ───── */
@@ -334,4 +345,70 @@ export async function checkPartyAchievements(
   savePartyState(partyState)
   saveAchievements(state)
   return justUnlocked
+}
+
+/* ───── Rating achievements (multi-tier) ───── */
+
+/**
+ * Pure helper: turn a snapshot of the user's rating stats into the set of
+ * achievement ids that should now be unlocked. Returns a new state object
+ * and the list of `UnlockResult`s ready to be awarded. Does NOT touch
+ * localStorage or call `awardCoins` — that is the caller's job, which makes
+ * the function trivially unit-testable.
+ *
+ * Tiers (see `ACHIEVEMENTS` above for full titles + icons):
+ *   ratings:  1 → first_rating   | 5 → ratings_5  | 25 → ratings_25  | 100 → ratings_100
+ *   comments: 1 → first_comment  | 10 → comments_10 | 50 → comments_50
+ *   fivestars: 1 → first_five_star | 25 → five_stars_25
+ */
+export function evaluateRatingAchievements(
+  stats: { ratings: number; comments: number; fiveStars: number },
+  state: Record<string, AchievementState>,
+): { newUnlocks: UnlockResult[]; nextState: Record<string, AchievementState> } {
+  const newUnlocks: UnlockResult[] = []
+  const next: Record<string, AchievementState> = { ...state }
+
+  function unlock(id: string) {
+    if (next[id]?.unlocked) return
+    const def = ACHIEVEMENTS.find((a) => a.id === id)
+    if (!def) return
+    const at = new Date().toISOString()
+    next[id] = { unlocked: true, unlockedAt: at }
+    newUnlocks.push({ achievement: def, total: def.coins })
+  }
+
+  if (stats.ratings >= 1) unlock('first_rating')
+  if (stats.ratings >= 5) unlock('ratings_5')
+  if (stats.ratings >= 25) unlock('ratings_25')
+  if (stats.ratings >= 100) unlock('ratings_100')
+
+  if (stats.comments >= 1) unlock('first_comment')
+  if (stats.comments >= 10) unlock('comments_10')
+  if (stats.comments >= 50) unlock('comments_50')
+
+  if (stats.fiveStars >= 1) unlock('first_five_star')
+  if (stats.fiveStars >= 25) unlock('five_stars_25')
+
+  return { newUnlocks, nextState: next }
+}
+
+/**
+ * Re-evaluate the user's rating achievements from current `place_ratings`
+ * state. Fire-and-forget from `submitRating`'s online success path. Awards
+ * coins for each new unlock and persists the updated state. Offline-drained
+ * ratings do not trigger this — matching the check-in pattern, the next
+ * online submission will catch up.
+ */
+export async function checkRatingAchievements(userName: string): Promise<UnlockResult[]> {
+  const state = loadAchievements()
+  // Dynamic import avoids a hard module cycle: ratings.ts imports this file
+  // dynamically inside submitRating.
+  const { getUserRatingStats } = await import('./ratings')
+  const stats = await getUserRatingStats(userName)
+  const { newUnlocks, nextState } = evaluateRatingAchievements(stats, state)
+  if (newUnlocks.length > 0) {
+    saveAchievements(nextState)
+    for (const u of newUnlocks) awardCoins(u.total)
+  }
+  return newUnlocks
 }

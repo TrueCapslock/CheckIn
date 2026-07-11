@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Rating } from './types'
 import { getAverageRating, filterRatingsToSelfAndFriends, paginateRatings } from './ratings'
+import { evaluateRatingAchievements } from './achievements'
 
 const mkRating = (userName: string, rating: number, comment: string | null = null): Rating => ({
   id: `id-${userName}-${rating}`,
@@ -123,5 +124,118 @@ describe('paginateRatings', () => {
     const copy = ratings.slice()
     paginateRatings(ratings, 1, 10)
     expect(ratings).toEqual(copy)
+  })
+})
+
+describe('evaluateRatingAchievements', () => {
+  const emptyStats = { ratings: 0, comments: 0, fiveStars: 0 }
+
+  it('returns no unlocks for a fresh user with zero stats', () => {
+    const { newUnlocks, nextState } = evaluateRatingAchievements(emptyStats, {})
+    expect(newUnlocks).toEqual([])
+    expect(nextState).toEqual({})
+  })
+
+  it('unlocks first_rating at exactly 1 place rated', () => {
+    const { newUnlocks } = evaluateRatingAchievements({ ...emptyStats, ratings: 1 }, {})
+    expect(newUnlocks.map((u) => u.achievement.id)).toEqual(['first_rating'])
+  })
+
+  it('unlocks every ratings tier up to the user\'s count (4 → 1 + 5 not yet, 5 → 1+5, 25 → 1+5+25, 100 → all four)', () => {
+    const four = evaluateRatingAchievements({ ...emptyStats, ratings: 4 }, {})
+    expect(four.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_rating'])
+
+    const five = evaluateRatingAchievements({ ...emptyStats, ratings: 5 }, {})
+    expect(five.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_rating', 'ratings_5'])
+
+    const twentyFive = evaluateRatingAchievements({ ...emptyStats, ratings: 25 }, {})
+    expect(twentyFive.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_rating', 'ratings_5', 'ratings_25'])
+
+    const hundred = evaluateRatingAchievements({ ...emptyStats, ratings: 100 }, {})
+    expect(hundred.newUnlocks.map((u) => u.achievement.id)).toEqual([
+      'first_rating', 'ratings_5', 'ratings_25', 'ratings_100',
+    ])
+  })
+
+  it('unlocks comment tiers (1, 10, 50)', () => {
+    const one = evaluateRatingAchievements({ ...emptyStats, comments: 1 }, {})
+    expect(one.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_comment'])
+
+    const ten = evaluateRatingAchievements({ ...emptyStats, comments: 10 }, {})
+    expect(ten.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_comment', 'comments_10'])
+
+    const fifty = evaluateRatingAchievements({ ...emptyStats, comments: 50 }, {})
+    expect(fifty.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_comment', 'comments_10', 'comments_50'])
+  })
+
+  it('unlocks five-star tiers (1, 25)', () => {
+    const one = evaluateRatingAchievements({ ...emptyStats, fiveStars: 1 }, {})
+    expect(one.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_five_star'])
+
+    const twentyFive = evaluateRatingAchievements({ ...emptyStats, fiveStars: 25 }, {})
+    expect(twentyFive.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_five_star', 'five_stars_25'])
+  })
+
+  it('combines all three families when stats are all high', () => {
+    const { newUnlocks } = evaluateRatingAchievements(
+      { ratings: 25, comments: 50, fiveStars: 25 },
+      {},
+    )
+    expect(newUnlocks.map((u) => u.achievement.id).sort()).toEqual([
+      'comments_10', 'comments_50', 'first_comment', 'first_five_star', 'first_rating',
+      'five_stars_25', 'ratings_25', 'ratings_5',
+    ])
+  })
+
+  it('is idempotent: already-unlocked ids are not re-emitted', () => {
+    const first = evaluateRatingAchievements({ ratings: 1, comments: 1, fiveStars: 1 }, {})
+    expect(first.newUnlocks.map((u) => u.achievement.id).sort()).toEqual([
+      'first_comment', 'first_five_star', 'first_rating',
+    ])
+    const second = evaluateRatingAchievements(
+      { ratings: 1, comments: 1, fiveStars: 1 },
+      first.nextState,
+    )
+    expect(second.newUnlocks).toEqual([])
+    expect(second.nextState).toEqual(first.nextState)
+  })
+
+  it('emits new unlocks when crossing a tier, even with prior unlocks', () => {
+    const baseline = evaluateRatingAchievements({ ratings: 4, comments: 0, fiveStars: 0 }, {})
+    expect(baseline.newUnlocks.map((u) => u.achievement.id)).toEqual(['first_rating'])
+    const crossTier = evaluateRatingAchievements(
+      { ratings: 5, comments: 0, fiveStars: 0 },
+      baseline.nextState,
+    )
+    expect(crossTier.newUnlocks.map((u) => u.achievement.id)).toEqual(['ratings_5'])
+  })
+
+  it('stamps unlockedAt on each newly-unlocked id', () => {
+    const before = Date.now()
+    const { nextState } = evaluateRatingAchievements({ ...emptyStats, ratings: 1 }, {})
+    const after = Date.now()
+    const at = Date.parse(nextState.first_rating.unlockedAt!)
+    expect(Number.isFinite(at)).toBe(true)
+    expect(at).toBeGreaterThanOrEqual(before)
+    expect(at).toBeLessThanOrEqual(after)
+  })
+
+  it('is a pure function: does not mutate the input state', () => {
+    const state = { foo: { unlocked: true, unlockedAt: 'x' } }
+    const copy = JSON.parse(JSON.stringify(state))
+    evaluateRatingAchievements({ ratings: 5, comments: 5, fiveStars: 5 }, state)
+    expect(state).toEqual(copy)
+  })
+
+  it('preserves unrelated keys in the passed-in state', () => {
+    const state = {
+      first_checkin: { unlocked: true, unlockedAt: '2024-01-01T00:00:00Z' },
+      unrelated: { unlocked: true, unlockedAt: 'never' },
+    }
+    const { nextState } = evaluateRatingAchievements({ ...emptyStats, ratings: 5 }, state)
+    expect(nextState.first_checkin).toEqual(state.first_checkin)
+    expect(nextState.unrelated).toEqual(state.unrelated)
+    expect(nextState.first_rating?.unlocked).toBe(true)
+    expect(nextState.ratings_5?.unlocked).toBe(true)
   })
 })

@@ -225,6 +225,12 @@ export default function PlaceDetail() {
       setRatingError(res.error ?? null)
       return
     }
+    // Surface any newly-unlocked rating achievements via the same toast
+    // the check-in flow uses.
+    if (res.unlocked && res.unlocked.length > 0) {
+      setAchievements(res.unlocked)
+      setTimeout(() => setAchievements([]), 5000)
+    }
   }
 
   // Persist a comment-only change for the current rating. The star is one-shot
@@ -241,6 +247,10 @@ export default function PlaceDetail() {
     const res = await submitRating(id, userName, myRating.rating, normalized)
     setSubmittingRating(false)
     if (!res.ok) setRatingError(res.error ?? null)
+    if (res.unlocked && res.unlocked.length > 0) {
+      setAchievements(res.unlocked)
+      setTimeout(() => setAchievements([]), 5000)
+    }
   }
 
   // Debounced auto-save: when the comment changes (and the user has rated),
