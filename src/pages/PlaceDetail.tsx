@@ -479,9 +479,10 @@ export default function PlaceDetail() {
         </div>
       </div>
 
-      {/* Bottom action stack (check-in button + toasts). Mirrors the shell
-          width chain so it stays centered with the floating card on iPad. */}
-      <div className="fixed bottom-16 sm:bottom-[5.25rem] md:bottom-[6.25rem] left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl px-4 pb-3 pointer-events-none">
+      {/* Bottom action stack (check-in button + toasts).
+          • Phone: floating card centered at max-w-md (mirrors the nav).
+          • iPad+: full bleed against the bottom of the screen. */}
+      <div className="fixed bottom-16 inset-x-0 px-4 pb-3 pointer-events-none z-20 sm:max-w-md sm:mx-auto md:max-w-full">
         <div className="space-y-2 pointer-events-auto">
         {/* Too far error toast */}
         {farError && (

@@ -96,16 +96,22 @@ export default function Layout() {
   }, [])
 
   return (
-    // Responsive shell (mobile-first: full-bleed at <sm, then progressively
-    // wider at sm/md/lg/xl). The bottom nav mirrors the same width chain so
-    // they stay visually glued to the edge of the floating "phone" on iPad.
-    <div className="app-shell max-w-md sm:max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl mx-auto min-h-svh flex flex-col overflow-hidden sm:my-5 sm:min-h-[calc(100svh-2.5rem)] md:my-6 md:min-h-[calc(100svh-3rem)] md:rounded-[2.5rem] sm:rounded-[2rem]">
+    // Responsive shell.
+    //   • Phone (<sm): floating card, max-w-md (448 px) centered with margins.
+    //   • Tablet (≥sm, <md): same floating card aesthetic.
+    //   • Tablet/iPad/iPad Pro (≥md): full-bleed shell — the app uses the
+    //     full viewport width, the bottom nav sits flush against the screen
+    //     bottom, and the rounded corners are dropped so the app feels like a
+    //     native iPad app rather than a phone app floating on a tablet.
+    <div className="app-shell w-full min-h-svh flex flex-col overflow-hidden sm:max-w-md sm:mx-auto sm:my-5 sm:min-h-[calc(100svh-2.5rem)] sm:rounded-[2rem] md:my-0 md:rounded-none md:min-h-svh">
       <PullToRefresh />
       <main className="app-content flex min-h-0 flex-1 flex-col overflow-hidden pb-[4.5rem]">
         <Outlet />
       </main>
 
-      <nav className="app-bottom-nav fixed bottom-0 sm:bottom-5 md:bottom-6 left-1/2 z-30 flex w-full max-w-md md:max-w-2xl lg:max-w-3xl xl:max-w-4xl -translate-x-1/2 sm:rounded-b-[2rem] md:rounded-b-[2.5rem] border-t px-3 pb-1 pt-1">
+      {/* Bottom nav: full bleed on iPad+ (no floating lift, no width cap).
+          At sm, mirrors the shell — a centered card with a rounded bottom. */}
+      <nav className="app-bottom-nav fixed bottom-0 inset-x-0 z-30 flex w-full border-t px-3 pb-1 pt-1 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-md sm:rounded-b-[2rem] md:left-0 md:translate-x-0 md:max-w-full md:rounded-b-none">
         {tabs.map((tab) => (
           <NavLink
             key={tab.label}
