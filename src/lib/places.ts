@@ -413,11 +413,24 @@ export async function upsertPlaceInSupabase(place: Place): Promise<void> {
 }
 
 export async function batchUpsertPlaces(places: Place[]): Promise<void> {
-  // Cache locally so places are visible immediately without waiting on Supabase
-  const existing = loadPlacesListCache()
-  const merged = mergePlaces(existing, places)
-  savePlacesListCache(merged)
-  for (const p of places) cachePlace(p)
+  // Cache locally so places are visible immediately without waiting on Supabase.
+  // Both cache writes are wrapped in savePlacesListCache / saveAll and tolerate
+  // localStorage QuotaExceededError, so a full browser cache must never block
+  // the Supabase upsert below.
+  try {
+    const existing = loadPlacesListCache()
+    const merged = mergePlaces(existing, places)
+    savePlacesListCache(merged)
+  } catch (e) {
+    console.warn('Places list cache write failed:', e)
+  }
+  for (const p of places) {
+    try {
+      cachePlace(p)
+    } catch (e) {
+      console.warn('cachePlace failed (continuing):', e)
+    }
+  }
 
   if (!hasSupabaseEnv() || places.length === 0) return
   const supabase = await getClient()
@@ -433,8 +446,12 @@ export async function batchUpsertPlaces(places: Place[]): Promise<void> {
     ...(p.website != null && { website: p.website }),
     ...(p.created_at && { created_at: p.created_at }),
   }))
-  const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' })
-  if (error) console.warn('Batch upsert failed:', error)
+  try {
+    const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' })
+    if (error) console.warn('Batch upsert failed:', error)
+  } catch (e) {
+    console.warn('Batch upsert threw (continuing):', e)
+  }
 }
 
 /**

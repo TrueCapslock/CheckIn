@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getCategories } from '../lib/categories'
 import { batchUpsertPlaces, deletePlaceInSupabase } from '../lib/places'
 import { isValidLngLat } from '../lib/location'
+import { isQuotaError } from '../lib/local-places'
 import type { Place } from '../lib/types'
 import MiniMapPicker from './MiniMapPicker'
 import { t } from '../lib/i18n'
@@ -110,7 +111,21 @@ export default function AdminAddPlace({ selectedLocation, editing, onSaved, onDe
       if (!isEditing) setForm(emptyForm)
       onSaved?.()
     } catch (e) {
-      setMessage({ ok: false, text: `Failed: ${(e as Error).message}` })
+      if (isQuotaError(e)) {
+        // Browser localStorage hit its per-origin cap (Safari / iOS users hit
+        // this after accumulating many cached check-ins / places). The Supabase
+        // upsert in `batchUpsertPlaces` swallows its own errors and warns, so
+        // we can't know for certain whether the server row saved — surface a
+        // clear next-step instead of the cryptic "The quota has been exceeded."
+        setMessage({
+          ok: false,
+          text:
+            'Browser storage is full on this device. The place may still have been saved to the server. ' +
+            'Free space in Safari → Settings → [this site] → Clear Website Data, then try again.',
+        })
+      } else {
+        setMessage({ ok: false, text: `Failed: ${(e as Error).message}` })
+      }
     } finally {
       setSaving(false)
     }
