@@ -43,6 +43,7 @@ const translations: Translations = {
     'home.near_you': 'Near you',
     'home.see_all': 'See all',
     'home.no_nearby_places': 'No nearby places loaded yet.',
+    'home.categories_heading': 'Categories',
 
     'feed.title': 'Activity',
     'feed.following_people': 'Following {count} people',
@@ -450,6 +451,7 @@ const translations: Translations = {
     'home.near_you': 'I nærheten',
     'home.see_all': 'Se alle',
     'home.no_nearby_places': 'Ingen steder i nærheten lastet ennå.',
+    'home.categories_heading': 'Kategorier',
 
     'feed.title': 'Aktivitet',
     'feed.following_people': 'Følger {count} personer',
