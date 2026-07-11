@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Map, { Marker } from 'react-map-gl/mapbox'
 import type { Place, CheckIn } from '../lib/types'
@@ -6,8 +6,8 @@ import { getCategoryIcon } from '../lib/categories'
 import { getPlace, getCheckInsForPlace, getCheckInCount, createCheckIn, getAllCheckIns } from '../lib/places'
 import type { CheckInResult } from '../lib/places'
 import { getUsername } from '../lib/user'
-import { followUser, unfollowUser, isFollowing, getFollowing } from '../lib/follow'
-import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating, filterRatingsToSelfAndFriends } from '../lib/ratings'
+import { followUser, unfollowUser, isFollowing } from '../lib/follow'
+import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating } from '../lib/ratings'
 import type { Rating } from '../lib/types'
 import { getMayorFromCheckIns } from '../lib/points'
 import { getPlacePhotos, addPlacePhoto } from '../lib/place-photos'
@@ -81,16 +81,14 @@ export default function PlaceDetail() {
   const [allRatings, setAllRatings] = useState<Rating[]>([])
   const [submittingRating, setSubmittingRating] = useState(false)
   const [ratingError, setRatingError] = useState<string | null>(null)
-  const [followingNames, setFollowingNames] = useState<string[]>(getFollowing())
+
 
   const userName = getUsername() || 'Anonymous'
   const { lang } = useLanguage()
   const { location: userLocation } = useUserLocation()
   const communityAvg = getAverageRating(allRatings)
-  const visibleRatings = useMemo(
-    () => filterRatingsToSelfAndFriends(allRatings, userName, followingNames),
-    [allRatings, userName, followingNames],
-  )
+  // Show every rating to every visitor, not just self + friends.
+  const visibleRatings = allRatings
 
   useEffect(() => {
     if (!id) return
@@ -163,10 +161,8 @@ export default function PlaceDetail() {
   const handleFollow = async (name: string) => {
     if (isFollowing(name)) {
       await unfollowUser(name)
-      setFollowingNames((prev) => prev.filter((n) => n !== name))
     } else {
       await followUser(name)
-      setFollowingNames((prev) => [...prev, name])
     }
     setRerender((n) => n + 1)
   }
