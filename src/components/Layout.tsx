@@ -103,7 +103,7 @@ export default function Layout() {
     //     full viewport width, the bottom nav sits flush against the screen
     //     bottom, and the rounded corners are dropped so the app feels like a
     //     native iPad app rather than a phone app floating on a tablet.
-    <div className="app-shell w-full min-h-svh flex flex-col overflow-hidden sm:max-w-md sm:mx-auto sm:my-5 sm:min-h-[calc(100svh-2.5rem)] sm:rounded-[2rem] md:my-0 md:rounded-none md:min-h-svh">
+    <div className="app-shell w-full min-h-svh flex flex-col overflow-hidden sm:max-w-md sm:mx-auto sm:my-5 sm:min-h-[calc(100svh-2.5rem)] sm:rounded-[2rem] md:max-w-full md:mx-0 md:my-0 md:rounded-none md:min-h-svh">
       <PullToRefresh />
       <main className="app-content flex min-h-0 flex-1 flex-col overflow-hidden pb-[4.5rem]">
         <Outlet />
