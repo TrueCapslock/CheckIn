@@ -83,6 +83,13 @@ export default function PlaceDetail() {
   const [ratingError, setRatingError] = useState<string | null>(null)
   const RATINGS_PAGE_SIZE = 10
   const [ratingsPage, setRatingsPage] = useState(0)
+  // Free-text comment that piggybacks on the user's star rating. Once the
+  // user has rated a place, the textarea is enabled and auto-saves
+  // COMMENT_DEBOUNCE_MS after the last keystroke (and on blur).
+  const [comment, setComment] = useState<string>('')
+  const commentTimerRef = useRef<number | null>(null)
+  const COMMENT_MAX_LENGTH = 500
+  const COMMENT_DEBOUNCE_MS = 1200
 
 
   const userName = getUsername() || 'Anonymous'
@@ -116,6 +123,16 @@ export default function PlaceDetail() {
   // bounce the user back to page 0 just because someone submitted a new rating.
   useEffect(() => {
     setRatingsPage(0)
+  }, [id])
+
+  // Drop any pending comment save and clear the textarea when the place
+  // changes. The content will be repopulated by `loadRatings` once it lands.
+  useEffect(() => {
+    if (commentTimerRef.current !== null) {
+      window.clearTimeout(commentTimerRef.current)
+      commentTimerRef.current = null
+    }
+    setComment('')
   }, [id])
 
   useEffect(() => {
@@ -184,6 +201,9 @@ export default function PlaceDetail() {
     // (e.g. optimistic tap arrives before getMyRatingForPlace finishes) can race
     // past the disabled prop — this guard catches that.
     if (myRating) return
+    // Carry over any in-progress comment text into the initial star submission
+    // so the user doesn't have to retype what they already wrote.
+    const initialComment = comment.trim() || null
     setSubmittingRating(true)
     setRatingError(null)
     const optimistic: Rating = {
@@ -191,18 +211,74 @@ export default function PlaceDetail() {
       place_id: id,
       user_name: userName,
       rating: stars,
+      comment: initialComment,
       created_at: new Date().toISOString(),
     }
     setMyRating(optimistic)
     setAllRatings((prev) => {
       const without = prev.filter((r) => r.user_name !== userName)
-      return [optimistic, ...without]
+      return [{ ...optimistic }, ...without]
     })
-    const res = await submitRating(id, userName, stars)
+    const res = await submitRating(id, userName, stars, initialComment)
     setSubmittingRating(false)
     if (!res.ok) {
       setRatingError(res.error ?? null)
       return
+    }
+  }
+
+  // Persist a comment-only change for the current rating. The star is one-shot
+  // so the rating never changes; the row is upserted so re-saves are idempotent.
+  const saveComment = async (text: string | null) => {
+    if (!id || !myRating || submittingRating) return
+    const normalized = text?.trim() ? text.trim() : null
+    setSubmittingRating(true)
+    setRatingError(null)
+    setMyRating((m) => (m ? { ...m, comment: normalized } : m))
+    setAllRatings((prev) =>
+      prev.map((r) => (r.user_name === userName ? { ...r, comment: normalized } : r)),
+    )
+    const res = await submitRating(id, userName, myRating.rating, normalized)
+    setSubmittingRating(false)
+    if (!res.ok) setRatingError(res.error ?? null)
+  }
+
+  // Debounced auto-save: when the comment changes (and the user has rated),
+  // wait COMMENT_DEBOUNCE_MS of quiet, then persist. Typing again resets the
+  // timer. The cleanup always clears the pending timer.
+  useEffect(() => {
+    if (!myRating) return
+    const trimmed = comment.trim() || null
+    if (trimmed === (myRating.comment ?? null)) return
+    if (commentTimerRef.current !== null) {
+      window.clearTimeout(commentTimerRef.current)
+    }
+    commentTimerRef.current = window.setTimeout(() => {
+      commentTimerRef.current = null
+      void saveComment(trimmed)
+    }, COMMENT_DEBOUNCE_MS)
+    return () => {
+      if (commentTimerRef.current !== null) {
+        window.clearTimeout(commentTimerRef.current)
+        commentTimerRef.current = null
+      }
+    }
+    // saveComment is intentionally omitted from deps: it captures the latest
+    // myRating via closure on every render, so the timer always sees fresh data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comment, myRating])
+
+  // On blur, flush any pending debounced save immediately so the user doesn't
+  // lose unsaved text when they tap away from the textarea.
+  const handleCommentBlur = () => {
+    if (commentTimerRef.current !== null) {
+      window.clearTimeout(commentTimerRef.current)
+      commentTimerRef.current = null
+    }
+    if (!myRating) return
+    const trimmed = comment.trim() || null
+    if (trimmed !== (myRating.comment ?? null)) {
+      void saveComment(trimmed)
     }
   }
 
@@ -214,6 +290,9 @@ export default function PlaceDetail() {
     ])
     setAllRatings(all)
     setMyRating(mine)
+    // Pre-populate the textarea with the user's persisted comment (if any) so
+    // a page refresh or place re-entry doesn't lose what they already wrote.
+    setComment(mine?.comment ?? '')
   }
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,6 +424,33 @@ export default function PlaceDetail() {
             <div className="mt-2 text-xs text-red-500">{t('place_detail.ratings_table_missing', lang)}</div>
           )}
 
+          {/* Comment textarea — only available after the user has rated. The
+              star is one-shot, but the comment auto-saves 1.2 s after the
+              last keystroke (and on blur). */}
+          {myRating && (
+            <div className="mt-2">
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value.slice(0, COMMENT_MAX_LENGTH))}
+                onBlur={handleCommentBlur}
+                disabled={submittingRating}
+                maxLength={COMMENT_MAX_LENGTH}
+                rows={2}
+                placeholder={t('place_detail.comment_placeholder', lang)}
+                className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300 dark:focus:ring-amber-500/40 disabled:opacity-60 resize-none"
+              />
+              <div className="mt-1 flex items-center justify-end text-[10px] text-gray-400 dark:text-gray-500">
+                <span>
+                  {submittingRating
+                    ? t('place_detail.saving_comment', lang)
+                    : comment.length > 0
+                      ? `${comment.length}/${COMMENT_MAX_LENGTH}`
+                      : ''}
+                </span>
+              </div>
+            </div>
+          )}
+
           <p className="text-gray-600 dark:text-gray-400 text-sm flex items-center gap-1 mt-2">
             <span className="text-base">📍</span> {place.address}
           </p>
@@ -457,27 +563,34 @@ export default function PlaceDetail() {
                   const following = isFollowing(r.user_name)
                   const isMe = r.user_name === userName
                   return (
-                    <div key={r.id} className="flex items-center gap-2 text-sm">
-                      <span className="w-6 h-6 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0">
-                        {r.user_name[0].toUpperCase()}
-                      </span>
-                      <Link to={`/user/${encodeURIComponent(r.user_name)}`} className="font-medium dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400">
-                        {isMe ? t('friends.you', lang) : r.user_name}
-                      </Link>
-                      <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
-                        <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
-                      </span>
-                      {r.user_name !== userName && (
-                        <button
-                          onClick={() => handleFollow(r.user_name)}
-                          className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
-                        >
-                          {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
-                        </button>
+                    <div key={r.id} className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="w-6 h-6 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-xs font-medium text-emerald-700 dark:text-emerald-300 shrink-0">
+                          {r.user_name[0].toUpperCase()}
+                        </span>
+                        <Link to={`/user/${encodeURIComponent(r.user_name)}`} className="font-medium dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400">
+                          {isMe ? t('friends.you', lang) : r.user_name}
+                        </Link>
+                        <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
+                          <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
+                        </span>
+                        {r.user_name !== userName && (
+                          <button
+                            onClick={() => handleFollow(r.user_name)}
+                            className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                          >
+                            {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
+                          </button>
+                        )}
+                        <span className="text-gray-400 text-xs">
+                          {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                      {r.comment && (
+                        <p className="ml-8 pl-2 border-l-2 border-emerald-200 dark:border-emerald-800 text-xs text-gray-600 dark:text-gray-300 italic whitespace-pre-wrap break-words">
+                          {r.comment}
+                        </p>
                       )}
-                      <span className="text-gray-400 text-xs">
-                        {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
                     </div>
                   )
                 })}

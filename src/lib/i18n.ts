@@ -101,6 +101,8 @@ const translations: Translations = {
     'place_detail.prev': 'Prev',
     'place_detail.next': 'Next',
     'place_detail.page_of': 'Page {page} of {total}',
+    'place_detail.comment_placeholder': 'Add a comment (optional)…',
+    'place_detail.saving_comment': 'Saving…',
 
     'friends.title': 'Friends',
     'friends.description': 'Find people and manage who you follow.',
@@ -512,6 +514,8 @@ const translations: Translations = {
     'place_detail.prev': 'Forrige',
     'place_detail.next': 'Neste',
     'place_detail.page_of': 'Side {page} av {total}',
+    'place_detail.comment_placeholder': 'Legg til en kommentar (valgfritt)…',
+    'place_detail.saving_comment': 'Lagrer…',
 
     'friends.title': 'Venner',
     'friends.description': 'Finn personer og administrer hvem du følger.',

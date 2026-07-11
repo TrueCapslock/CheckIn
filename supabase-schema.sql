@@ -322,3 +322,37 @@ INSERT INTO places (id, name, type, address, description, latitude, longitude) V
   ('7', 'Hops & Barley', 'bar', '567 Birch Dr, Portland, OR', 'Neighborhood pub with 20 beers on tap.', 45.5210, -122.6760),
   ('8', 'Roast & Toast', 'cafe', '189 Maple Dr, Portland, OR', 'Artisan coffee roastery and brunch spot.', 45.5190, -122.6720)
 ON CONFLICT (id) DO NOTHING;
+
+-- Place ratings (1–5 stars per user, optional free-text comment, latest upsert wins)
+CREATE TABLE IF NOT EXISTS place_ratings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  place_id text NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  user_name text NOT NULL,
+  rating smallint NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(place_id, user_name)
+);
+
+-- Migration: add the comment column to an existing place_ratings table
+ALTER TABLE place_ratings ADD COLUMN IF NOT EXISTS comment text;
+
+CREATE INDEX IF NOT EXISTS idx_place_ratings_place_id ON place_ratings (place_id);
+
+ALTER TABLE place_ratings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read ratings"
+  ON place_ratings FOR SELECT
+  USING (true);
+
+CREATE POLICY "Anyone can insert ratings"
+  ON place_ratings FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Anyone can update ratings"
+  ON place_ratings FOR UPDATE
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON place_ratings TO anon;
+

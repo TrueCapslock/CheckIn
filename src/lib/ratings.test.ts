@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest'
 import type { Rating } from './types'
 import { getAverageRating, filterRatingsToSelfAndFriends, paginateRatings } from './ratings'
 
-const mkRating = (userName: string, rating: number): Rating => ({
+const mkRating = (userName: string, rating: number, comment: string | null = null): Rating => ({
   id: `id-${userName}-${rating}`,
   place_id: 'p',
   user_name: userName,
   rating,
+  comment,
   created_at: new Date().toISOString(),
 })
 

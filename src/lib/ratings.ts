@@ -98,25 +98,33 @@ export function filterRatingsToSelfAndFriends(
 }
 
 /**
- * Submit (or update) the current user's rating for a place.
+ * Submit (or update) the current user's rating for a place. An optional
+ * free-text `comment` is stored on the same row (NULL when omitted or
+ * whitespace-only) and round-trips through the offline queue so a
+ * connection blip never loses a typed review.
  *  - Online + Supabase reachable → upserts the row directly.
  *  - Offline OR any other transient failure → queues to localStorage for
  *    `processRatingsQueue()` to drain on the next online tick.
  * The expected Supabase schema is:
  *   place_ratings(id uuid pk, place_id text, user_name text, rating int2,
- *                 created_at timestamptz, UNIQUE(place_id, user_name))
+ *                 comment text NULL, created_at timestamptz,
+ *                 UNIQUE(place_id, user_name))
  */
 export async function submitRating(
   placeId: string,
   userName: string,
   rating: number,
+  comment: string | null = null,
 ): Promise<{ ok: boolean; queued: boolean; error?: string }> {
   if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
     return { ok: false, queued: false, error: 'rating must be an integer 1–5' }
   }
+  // Persist a single null shape — never an empty/whitespace string —
+  // so downstream code can rely on `r.comment` being a real value or null.
+  const trimmedComment = comment?.trim() ? comment.trim() : null
   const { addRatingToQueue, isOnline } = await import('./sync')
   if (!isOnline()) {
-    addRatingToQueue({ placeId, userName, rating })
+    addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
     return { ok: true, queued: true }
   }
   try {
@@ -125,6 +133,7 @@ export async function submitRating(
         place_id: placeId,
         user_name: userName,
         rating,
+        comment: trimmedComment,
         created_at: new Date().toISOString(),
       },
       { onConflict: 'place_id,user_name' },
@@ -135,12 +144,12 @@ export async function submitRating(
       if (error.code === '42P01') {
         return { ok: false, queued: false, error: 'place_ratings table missing — apply Supabase migration' }
       }
-      addRatingToQueue({ placeId, userName, rating })
+      addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
       return { ok: true, queued: true }
     }
     return { ok: true, queued: false }
   } catch {
-    addRatingToQueue({ placeId, userName, rating })
+    addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
     return { ok: true, queued: true }
   }
 }

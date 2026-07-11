@@ -155,6 +155,7 @@ export interface QueuedRating {
   placeId: string
   userName: string
   rating: number
+  comment: string | null
   timestamp: string
   retries: number
 }
@@ -201,6 +202,7 @@ export async function processRatingsQueue(): Promise<{ ok: number; fail: number 
           place_id: item.placeId,
           user_name: item.userName,
           rating: item.rating,
+          comment: item.comment,
           created_at: item.timestamp,
         },
         { onConflict: 'place_id,user_name' },

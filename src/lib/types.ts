@@ -65,5 +65,6 @@ export interface Rating {
   place_id: string
   user_name: string
   rating: number // 1-5 stars
+  comment: string | null
   created_at: string
 }

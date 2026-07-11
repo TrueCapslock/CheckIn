@@ -32,6 +32,8 @@ export default async function handler(req, res) {
       await supabase.from('app_config').delete().neq('id', 0)
     }
 
+    // place_ratings has a FK to places, so it must be cleared before places.
+    await supabase.from('place_ratings').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     await supabase.from('place_photos').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     await supabase.from('check_ins').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     await supabase.from('places').delete().neq('id', '00000000-0000-0000-0000-000000000000')
