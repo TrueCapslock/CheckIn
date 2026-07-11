@@ -158,7 +158,7 @@ export async function submitRating(
   const trimmedComment = comment?.trim() ? comment.trim() : null
   const { addRatingToQueue, isOnline } = await import('./sync')
   if (!isOnline()) {
-    addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
+    addRatingToQueue({ op: 'upsert', placeId, userName, rating, comment: trimmedComment })
     return { ok: true, queued: true }
   }
   try {
@@ -178,7 +178,7 @@ export async function submitRating(
       if (error.code === '42P01') {
         return { ok: false, queued: false, error: 'place_ratings table missing — apply Supabase migration' }
       }
-      addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
+      addRatingToQueue({ op: 'upsert', placeId, userName, rating, comment: trimmedComment })
       return { ok: true, queued: true }
     }
     // Fire rating achievements (best-effort). Use a dynamic import to avoid a
@@ -192,7 +192,47 @@ export async function submitRating(
     }
     return { ok: true, queued: false, unlocked }
   } catch {
-    addRatingToQueue({ placeId, userName, rating, comment: trimmedComment })
+    addRatingToQueue({ op: 'upsert', placeId, userName, rating, comment: trimmedComment })
+    return { ok: true, queued: true }
+  }
+}
+
+/**
+ * Delete the current user's rating for a place. Mirrors submitRating's
+ * online/offline split:
+ *  - Online + Supabase reachable → DELETE … WHERE place_id=… AND user_name=…
+ *  - Offline OR any transient failure → queue a `delete` op so
+ *    `processRatingsQueue()` will replay it on the next online tick.
+ * Deleting a row that doesn't exist is treated as a successful no-op, so
+ * the UI can optimistically remove the rating without a pre-check.
+ * Achievements are intentionally NOT re-evaluated on delete — they are
+ * lifetime unlocks, so removing a rating cannot revoke earned badges.
+ */
+export async function deleteRating(
+  placeId: string,
+  userName: string,
+): Promise<{ ok: boolean; queued: boolean; error?: string }> {
+  const { addRatingToQueue, isOnline } = await import('./sync')
+  if (!isOnline()) {
+    addRatingToQueue({ op: 'delete', placeId, userName })
+    return { ok: true, queued: true }
+  }
+  try {
+    const { error } = await supabase
+      .from('place_ratings')
+      .delete()
+      .eq('place_id', placeId)
+      .eq('user_name', userName)
+    if (error) {
+      if (error.code === '42P01') {
+        return { ok: false, queued: false, error: 'place_ratings table missing — apply Supabase migration' }
+      }
+      addRatingToQueue({ op: 'delete', placeId, userName })
+      return { ok: true, queued: true }
+    }
+    return { ok: true, queued: false }
+  } catch {
+    addRatingToQueue({ op: 'delete', placeId, userName })
     return { ok: true, queued: true }
   }
 }

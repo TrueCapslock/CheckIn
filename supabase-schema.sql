@@ -354,5 +354,10 @@ CREATE POLICY "Anyone can update ratings"
   USING (true)
   WITH CHECK (true);
 
+-- Anyone can delete their own rating (RLS is permissive; the client filters by user_name)
+CREATE POLICY "Anyone can delete ratings"
+  ON place_ratings FOR DELETE
+  USING (true);
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON place_ratings TO anon;
 

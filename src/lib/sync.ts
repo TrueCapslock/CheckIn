@@ -150,28 +150,80 @@ export async function processStoreQueue(): Promise<{ ok: number; fail: number }>
 
 const RATING_QUEUE_KEY = 'checkin_rating_offline_queue'
 
-export interface QueuedRating {
+/** Common fields for every queued rating op. */
+interface QueuedRatingBase {
   id: string
   placeId: string
   userName: string
-  rating: number
-  comment: string | null
   timestamp: string
   retries: number
 }
 
+/** Upsert: a new or changed 1-5 star rating (with optional comment). */
+export interface QueuedRatingUpsert extends QueuedRatingBase {
+  op: 'upsert'
+  rating: number
+  comment: string | null
+}
+
+/** Delete: remove the user's existing row for (placeId, userName). */
+export interface QueuedRatingDelete extends QueuedRatingBase {
+  op: 'delete'
+}
+
+export type QueuedRating = QueuedRatingUpsert | QueuedRatingDelete
+
+/** Shape accepted by addRatingToQueue — the type union without the
+ *  auto-filled id / timestamp / retries fields. */
+export type QueuedRatingInput =
+  | Omit<QueuedRatingUpsert, 'id' | 'timestamp' | 'retries'>
+  | Omit<QueuedRatingDelete, 'id' | 'timestamp' | 'retries'>
+
 export function getRatingQueue(): QueuedRating[] {
   try {
-    return JSON.parse(localStorage.getItem(RATING_QUEUE_KEY) || '[]')
+    const parsed = JSON.parse(localStorage.getItem(RATING_QUEUE_KEY) || '[]') as unknown[]
+    if (!Array.isArray(parsed)) return []
+    // Migration: entries written by v0.4.27 and earlier have no `op` field.
+    // Default them to 'upsert' so the discriminated-union drain stays valid.
+    return parsed.map((raw) => {
+      if (!raw || typeof raw !== 'object') return null
+      const q = raw as Record<string, unknown>
+      // Drop entries missing the keys we use to dedupe (placeId, userName) —
+      // they're either corrupt or from a future schema and shouldn't drain.
+      if (typeof q.placeId !== 'string' || typeof q.userName !== 'string') return null
+      const op: 'upsert' | 'delete' = q.op === 'delete' ? 'delete' : 'upsert'
+      if (op === 'delete') {
+        return {
+          id: String(q.id ?? crypto.randomUUID()),
+          placeId: q.placeId,
+          userName: q.userName,
+          timestamp: String(q.timestamp ?? new Date().toISOString()),
+          retries: Number(q.retries ?? 0),
+          op: 'delete',
+        } satisfies QueuedRatingDelete
+      }
+      return {
+        id: String(q.id ?? crypto.randomUUID()),
+        placeId: q.placeId,
+        userName: q.userName,
+        rating: Number(q.rating ?? 0),
+        comment: (q.comment ?? null) as string | null,
+        timestamp: String(q.timestamp ?? new Date().toISOString()),
+        retries: Number(q.retries ?? 0),
+        op: 'upsert',
+      } satisfies QueuedRatingUpsert
+    }).filter((q): q is QueuedRating => q !== null)
   } catch {
     return []
   }
 }
 
-export function addRatingToQueue(item: Omit<QueuedRating, 'id' | 'timestamp' | 'retries'>): void {
+export function addRatingToQueue(item: QueuedRatingInput): void {
   const queue = getRatingQueue()
   // Dedupe: if the user already has a queued rating for this (placeId, userName),
   // overwrite it with the new value rather than accumulating stale entries.
+  // Works for both upsert and delete — the latest op wins, which collapses
+  // "submit then delete" into just "delete" on drain.
   const filtered = queue.filter(
     (q) => !(q.placeId === item.placeId && q.userName === item.userName),
   )
@@ -180,7 +232,7 @@ export function addRatingToQueue(item: Omit<QueuedRating, 'id' | 'timestamp' | '
     id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     retries: 0,
-  })
+  } as QueuedRating)
   localStorage.setItem(RATING_QUEUE_KEY, JSON.stringify(filtered))
 }
 
@@ -197,16 +249,27 @@ export async function processRatingsQueue(): Promise<{ ok: number; fail: number 
   const { supabase } = await import('./supabase')
   for (const item of queue) {
     try {
-      const { error } = await supabase.from('place_ratings').upsert(
-        {
-          place_id: item.placeId,
-          user_name: item.userName,
-          rating: item.rating,
-          comment: item.comment,
-          created_at: item.timestamp,
-        },
-        { onConflict: 'place_id,user_name' },
-      )
+      let error: { code?: string; message?: string } | null = null
+      if (item.op === 'delete') {
+        const res = await supabase
+          .from('place_ratings')
+          .delete()
+          .eq('place_id', item.placeId)
+          .eq('user_name', item.userName)
+        error = res.error
+      } else {
+        const res = await supabase.from('place_ratings').upsert(
+          {
+            place_id: item.placeId,
+            user_name: item.userName,
+            rating: item.rating,
+            comment: item.comment,
+            created_at: item.timestamp,
+          },
+          { onConflict: 'place_id,user_name' },
+        )
+        error = res.error
+      }
       if (error) {
         // 42P01 = undefined_table — the place_ratings table hasn't been created yet
         // in Supabase. Don't keep retrying, that's noise.

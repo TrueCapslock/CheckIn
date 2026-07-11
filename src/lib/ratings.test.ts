@@ -1,7 +1,23 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import type { Rating } from './types'
 import { getAverageRating, filterRatingsToSelfAndFriends, paginateRatings } from './ratings'
 import { evaluateRatingAchievements } from './achievements'
+import { getRatingQueue, addRatingToQueue } from './sync'
+
+// Minimal in-memory localStorage shim for the node test environment.
+// The queue helpers in ./sync read/write localStorage, so we provide a
+// tiny Map-backed implementation rather than pulling in jsdom.
+if (typeof globalThis.localStorage === 'undefined') {
+  const store = new Map<string, string>()
+  ;(globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => { store.set(k, String(v)) },
+    removeItem: (k: string) => { store.delete(k) },
+    clear: () => { store.clear() },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    get length() { return store.size },
+  }
+}
 
 const mkRating = (userName: string, rating: number, comment: string | null = null): Rating => ({
   id: `id-${userName}-${rating}`,
@@ -237,5 +253,79 @@ describe('evaluateRatingAchievements', () => {
     expect(nextState.unrelated).toEqual(state.unrelated)
     expect(nextState.first_rating?.unlocked).toBe(true)
     expect(nextState.ratings_5?.unlocked).toBe(true)
+  })
+})
+
+describe('rating offline queue (delete + back-compat + dedupe)', () => {
+  const KEY = 'checkin_rating_offline_queue'
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('migrates legacy v0.4.27 entries (no `op` field) to `op: "upsert"` on read', () => {
+    // Simulate a queue left behind by a v0.4.27 install: entries have no `op` field.
+    const legacy = [
+      {
+        id: 'legacy-1',
+        placeId: 'p1',
+        userName: 'alice',
+        rating: 5,
+        comment: 'great',
+        timestamp: '2025-01-01T00:00:00Z',
+        retries: 0,
+      },
+    ]
+    localStorage.setItem(KEY, JSON.stringify(legacy))
+    const queue = getRatingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0].op).toBe('upsert')
+    // Type narrowing: upsert entries must carry rating + comment.
+    if (queue[0].op === 'upsert') {
+      expect(queue[0].rating).toBe(5)
+      expect(queue[0].comment).toBe('great')
+    }
+  })
+
+  it('drops malformed entries and never throws', () => {
+    localStorage.setItem(KEY, JSON.stringify([null, 42, 'nope', { not: 'a queue entry' }]))
+    expect(() => getRatingQueue()).not.toThrow()
+    expect(getRatingQueue()).toEqual([])
+  })
+
+  it('addRatingToQueue dedupes by (placeId, userName) — the latest op wins', () => {
+    addRatingToQueue({ op: 'upsert', placeId: 'p1', userName: 'alice', rating: 4, comment: 'meh' })
+    addRatingToQueue({ op: 'upsert', placeId: 'p1', userName: 'alice', rating: 5, comment: 'amazing' })
+    const queue = getRatingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0].op).toBe('upsert')
+    if (queue[0].op === 'upsert') {
+      expect(queue[0].rating).toBe(5)
+      expect(queue[0].comment).toBe('amazing')
+    }
+  })
+
+  it('a queued delete for (placeId, userName) replaces a queued upsert for the same pair', () => {
+    addRatingToQueue({ op: 'upsert', placeId: 'p1', userName: 'alice', rating: 5, comment: 'loved it' })
+    addRatingToQueue({ op: 'delete', placeId: 'p1', userName: 'alice' })
+    const queue = getRatingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0].op).toBe('delete')
+  })
+
+  it('a queued upsert for (placeId, userName) replaces a queued delete for the same pair', () => {
+    addRatingToQueue({ op: 'delete', placeId: 'p1', userName: 'alice' })
+    addRatingToQueue({ op: 'upsert', placeId: 'p1', userName: 'alice', rating: 3, comment: null })
+    const queue = getRatingQueue()
+    expect(queue).toHaveLength(1)
+    expect(queue[0].op).toBe('upsert')
+  })
+
+  it('keeps distinct (placeId, userName) pairs independent', () => {
+    addRatingToQueue({ op: 'delete', placeId: 'p1', userName: 'alice' })
+    addRatingToQueue({ op: 'upsert', placeId: 'p2', userName: 'alice', rating: 5, comment: null })
+    addRatingToQueue({ op: 'upsert', placeId: 'p1', userName: 'bob', rating: 4, comment: 'good' })
+    const queue = getRatingQueue()
+    expect(queue).toHaveLength(3)
   })
 })

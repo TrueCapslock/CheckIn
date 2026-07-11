@@ -7,7 +7,7 @@ import { getPlace, getCheckInsForPlace, getCheckInCount, createCheckIn, getAllCh
 import type { CheckInResult } from '../lib/places'
 import { getUsername } from '../lib/user'
 import { followUser, unfollowUser, isFollowing } from '../lib/follow'
-import { getRatingsForPlace, getMyRatingForPlace, submitRating, getAverageRating, paginateRatings } from '../lib/ratings'
+import { getRatingsForPlace, getMyRatingForPlace, submitRating, deleteRating, getAverageRating, paginateRatings } from '../lib/ratings'
 import type { Rating } from '../lib/types'
 import { getMayorFromCheckIns } from '../lib/points'
 import { getPlacePhotos, addPlacePhoto } from '../lib/place-photos'
@@ -292,6 +292,39 @@ export default function PlaceDetail() {
     }
   }
 
+  // Remove the user's own rating for this place. Achievements are intentionally
+  // NOT re-evaluated (deleteRating doesn't fire them) so earned badges stay
+  // earned even if the user wipes a review.
+  const handleDeleteRating = async () => {
+    if (!id || !myRating || submittingRating) return
+    // Cancel any pending debounced comment save so it can't resurrect the row
+    // milliseconds after we delete it.
+    if (commentTimerRef.current !== null) {
+      window.clearTimeout(commentTimerRef.current)
+      commentTimerRef.current = null
+    }
+    const ok = typeof window === 'undefined' || window.confirm(t('place_detail.remove_rating_confirm', lang))
+    if (!ok) return
+    setSubmittingRating(true)
+    setRatingError(null)
+    // Optimistic update: drop the user's row from local state immediately so
+    // the UI reacts before the network round-trip.
+    const prevMine = myRating
+    const prevAll = allRatings
+    setMyRating(null)
+    setAllRatings((prev) => prev.filter((r) => r.user_name !== userName))
+    setComment('')
+    const res = await deleteRating(id, userName)
+    setSubmittingRating(false)
+    if (!res.ok) {
+      // Roll back on hard failure (queued offline isn't a failure).
+      setMyRating(prevMine)
+      setAllRatings(prevAll)
+      setComment(prevMine.comment ?? '')
+      setRatingError(res.error ?? null)
+    }
+  }
+
   async function loadRatings() {
     if (!id) return
     const [all, mine] = await Promise.all([
@@ -428,6 +461,16 @@ export default function PlaceDetail() {
             />
             {submittingRating && (
               <span className="text-xs text-gray-400">{t('place_detail.submitting_rating', lang)}</span>
+            )}
+            {myRating && !submittingRating && (
+              <button
+                type="button"
+                onClick={() => void handleDeleteRating()}
+                aria-label={t('place_detail.remove_rating', lang)}
+                className="ml-auto text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
+              >
+                {t('place_detail.remove_rating', lang)}
+              </button>
             )}
           </div>
           {ratingError && (
@@ -584,10 +627,20 @@ export default function PlaceDetail() {
                         <span className="ml-1 text-amber-500 text-xs whitespace-nowrap">
                           <Stars rating={r.rating} /> <span className="ml-1 text-gray-400">({r.rating})</span>
                         </span>
+                        {isMe && !submittingRating && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteRating()}
+                            aria-label={t('place_detail.remove_rating', lang)}
+                            className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline ml-auto"
+                          >
+                            {t('place_detail.remove_rating', lang)}
+                          </button>
+                        )}
                         {r.user_name !== userName && (
                           <button
                             onClick={() => handleFollow(r.user_name)}
-                            className={`text-xs font-medium ml-auto ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                            className={`text-xs font-medium ${isMe ? '' : 'ml-auto'} ${following ? 'text-gray-400' : 'text-emerald-600 dark:text-emerald-400'}`}
                           >
                             {following ? t('place_detail.following', lang) : t('place_detail.follow', lang)}
                           </button>
