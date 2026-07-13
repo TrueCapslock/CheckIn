@@ -47,7 +47,7 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
   const mapRef = useRef<MapRef>(null)
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null)
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; message: string; progress?: boolean } | null>(null)
   const [locating, setLocating] = useState(false)
   const [viewState, setViewState] = useState<{ longitude: number; latitude: number; zoom: number } | null>(null)
   const { lang } = useLanguage()
@@ -111,8 +111,12 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
     try {
       const location = { latitude: point.lat, longitude: point.lng }
 
-      // Try Geoapify first (fast, structured data)
-      let places = await searchGeoapifyPlaces(location)
+      // Try Geoapify first (fast, structured data). Surface page-by-page
+      // progress so long imports in dense areas don't look hung.
+      let places = await searchGeoapifyPlaces(location, 10000, undefined, (p) => {
+        if (p.done) return
+        setResult({ ok: true, progress: true, message: `Fetching page ${p.page}… (${p.fetched} so far)` })
+      })
 
       // Fall back to Overpass if Geoapify returned nothing or isn't configured
       if (places.length === 0) {
@@ -214,7 +218,13 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
       </button>
 
       {result && (
-        <div className={`mt-2 text-sm ${result.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+        <div className={`mt-2 text-sm ${
+          result.progress
+            ? 'text-blue-600 dark:text-blue-400'
+            : result.ok
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-red-600 dark:text-red-400'
+        }`}>
           {result.message}
         </div>
       )}

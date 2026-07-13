@@ -45,7 +45,7 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
   const mapRef = useRef<MapRef>(null)
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null)
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; message: string; progress?: boolean } | null>(null)
   const [locating, setLocating] = useState(false)
   const [viewState, setViewState] = useState<{ longitude: number; latitude: number; zoom: number } | null>(null)
 
@@ -100,7 +100,10 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
     setResult(null)
     try {
       const location = { latitude: point.lat, longitude: point.lng }
-      let places = await searchGeoapifyPlaces(location)
+      let places = await searchGeoapifyPlaces(location, 10000, undefined, (p) => {
+        if (p.done) return
+        setResult({ ok: true, progress: true, message: `Fetching page ${p.page}… (${p.fetched} so far)` })
+      })
 
       if (places.length === 0) {
         const overpassResults = await getOverpassPlaces(null, location)
@@ -200,7 +203,13 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
           {importing ? 'Importing...' : 'Import places within 10 km'}
         </button>
         {result && (
-          <div className={`text-sm ${result.ok ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          <div className={`text-sm ${
+            result.progress
+              ? 'text-blue-600 dark:text-blue-400'
+              : result.ok
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-red-600 dark:text-red-400'
+          }`}>
             {result.message}
           </div>
         )}
