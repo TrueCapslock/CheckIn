@@ -18,6 +18,16 @@ const DEFAULT_VIEW = { longitude: 10.7522, latitude: 59.9139, zoom: 11 }
 
 const EARTH_RADIUS_M = 6_371_000
 
+const RADIUS_MIN_KM = 1
+const RADIUS_MAX_KM = 10
+const RADIUS_STEP_KM = 0.5
+const DEFAULT_RADIUS_KM = 10
+
+function formatKm(km: number): string {
+  // Whole km render as "X km", fractional km as "X.X km"
+  return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`
+}
+
 function circleGeoJSON(center: { lat: number; lng: number }, radiusM: number, points = 64): GeoJSON.Feature<GeoJSON.Polygon> {
   const coords: [number, number][] = []
   const latRad = (center.lat * Math.PI) / 180
@@ -50,6 +60,7 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
   const [result, setResult] = useState<{ ok: boolean; message: string; progress?: boolean } | null>(null)
   const [locating, setLocating] = useState(false)
   const [viewState, setViewState] = useState<{ longitude: number; latitude: number; zoom: number } | null>(null)
+  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM)
   const { lang } = useLanguage()
 
   function handleSetPoint(lat: number, lng: number) {
@@ -110,22 +121,23 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
     setResult(null)
     try {
       const location = { latitude: point.lat, longitude: point.lng }
+      const radiusM = Math.round(radiusKm * 1000)
 
       // Try Geoapify first (fast, structured data). Surface page-by-page
       // progress so long imports in dense areas don't look hung.
-      let places = await searchGeoapifyPlaces(location, 10000, undefined, (p) => {
+      let places = await searchGeoapifyPlaces(location, radiusM, undefined, (p) => {
         if (p.done) return
         setResult({ ok: true, progress: true, message: `Fetching page ${p.page}… (${p.fetched} so far)` })
       })
 
       // Fall back to Overpass if Geoapify returned nothing or isn't configured
       if (places.length === 0) {
-        const overpassResults = await getOverpassPlaces(null, location)
+        const overpassResults = await getOverpassPlaces(null, location, radiusM)
         places = overpassResults.map(overpassToPlace)
       }
 
       if (places.length === 0) {
-        setResult({ ok: true, message: 'No places found within 10 km of this location.' })
+        setResult({ ok: true, message: `No places found within ${formatKm(radiusKm)} of this location.` })
         return
       }
       await batchUpsertPlaces(places)
@@ -163,9 +175,9 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
             onClick={(e) => handleSelectPoint(e.lngLat.lat, e.lngLat.lng)}
           >
             <NavigationControl position="top-right" />
-            {point && (
-              <>
-                <Source id="radius-circle" type="geojson" data={circleGeoJSON(point, 10000)}>
+        {point && (
+          <>
+            <Source id="radius-circle" type="geojson" data={circleGeoJSON(point, Math.round(radiusKm * 1000))}>
                   <Layer
                     id="radius-circle-fill"
                     type="fill"
@@ -208,6 +220,35 @@ export default function AdminImportMap({ onLocationSelect }: Props) {
           </span>
         )}
       </div>
+
+      {point && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor="admin-import-radius" className="text-xs font-medium text-gray-700 dark:text-gray-300">
+              {t('admin.radius_label', lang)}
+            </label>
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
+              {formatKm(radiusKm)}
+            </span>
+          </div>
+          <input
+            id="admin-import-radius"
+            type="range"
+            min={RADIUS_MIN_KM}
+            max={RADIUS_MAX_KM}
+            step={RADIUS_STEP_KM}
+            value={radiusKm}
+            onChange={(e) => setRadiusKm(Number(e.target.value))}
+            disabled={importing}
+            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={t('admin.radius_label', lang)}
+          />
+          <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-1 px-0.5">
+            <span>{RADIUS_MIN_KM} km</span>
+            <span>{RADIUS_MAX_KM} km</span>
+          </div>
+        </div>
+      )}
 
       <button
         disabled={!point || importing}
