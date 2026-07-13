@@ -4,12 +4,14 @@ import { searchGeoapifyPlaces } from '../lib/geoapify'
 import { getOverpassPlaces, overpassToPlace } from '../lib/overpass'
 import { batchUpsertPlaces } from '../lib/places'
 import { isValidLngLat } from '../lib/location'
+import { getTodayLocal } from '../lib/date'
+import { readLastUserImportDate, writeLastUserImportDate, hoursUntilNextImport } from '../lib/user-import'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
 const token = import.meta.env.VITE_MAPBOX_TOKEN
 const DEFAULT_VIEW = { longitude: 10.7522, latitude: 59.9139, zoom: 11 }
 const EARTH_RADIUS_M = 6_371_000
-const IMPORT_RADIUS_M = 10_000
+const IMPORT_RADIUS_M = 5_000
 
 const mapStyles = `
   .mapboxgl-ctrl-logo, .mapboxgl-ctrl-attrib { display: none !important; }
@@ -46,6 +48,9 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
   const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string; progress?: boolean } | null>(null)
+  const [lastImportDate, setLastImportDate] = useState<string | null>(() => readLastUserImportDate())
+  const alreadyImportedToday = lastImportDate === getTodayLocal()
+  const hoursUntilNext = alreadyImportedToday ? Math.ceil(hoursUntilNextImport()) : 0
   const [locating, setLocating] = useState(false)
   const [viewState, setViewState] = useState<{ longitude: number; latitude: number; zoom: number } | null>(null)
 
@@ -96,26 +101,36 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
 
   async function handleImport() {
     if (!point || !isValidLngLat(point.lat, point.lng)) return
+    if (alreadyImportedToday) {
+      setResult({ ok: false, message: `You can import again in ~${hoursUntilNext} hour${hoursUntilNext === 1 ? '' : 's'}.` })
+      return
+    }
     setImporting(true)
     setResult(null)
     try {
       const location = { latitude: point.lat, longitude: point.lng }
-      let places = await searchGeoapifyPlaces(location, 10000, undefined, (p) => {
+      let places = await searchGeoapifyPlaces(location, IMPORT_RADIUS_M, undefined, (p) => {
         if (p.done) return
         setResult({ ok: true, progress: true, message: `Fetching page ${p.page}… (${p.fetched} so far)` })
       })
 
       if (places.length === 0) {
-        const overpassResults = await getOverpassPlaces(null, location)
+        const overpassResults = await getOverpassPlaces(null, location, IMPORT_RADIUS_M)
         places = overpassResults.map(overpassToPlace)
       }
 
       if (places.length === 0) {
-        setResult({ ok: true, message: 'No places found within 10 km of this location.' })
+        setResult({ ok: true, message: `No places found within ${IMPORT_RADIUS_M / 1000} km of this location.` })
         return
       }
 
       await batchUpsertPlaces(places)
+      // Stamp the gate only on success so a failed fetch doesn't burn today's
+      // quota. Both the localStorage and the React state update in the same
+      // tick so the button reflects the new state without a refresh.
+      const today = getTodayLocal()
+      writeLastUserImportDate(today)
+      setLastImportDate(today)
       setResult({ ok: true, message: `Imported ${places.length} place${places.length === 1 ? '' : 's'}.` })
       onPlaceAdded()
     } catch (e) {
@@ -196,11 +211,15 @@ export default function PlaceAddMap({ onPlaceAdded }: Props) {
           )}
         </div>
         <button
-          disabled={!point || importing}
+          disabled={!point || importing || alreadyImportedToday}
           onClick={handleImport}
           className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white disabled:text-gray-500 rounded-xl font-medium text-sm transition-colors"
         >
-          {importing ? 'Importing...' : 'Import places within 10 km'}
+          {alreadyImportedToday
+            ? `Already imported today — try again in ~${hoursUntilNext}h`
+            : importing
+              ? 'Importing...'
+              : `Import places within ${IMPORT_RADIUS_M / 1000} km`}
         </button>
         {result && (
           <div className={`text-sm ${

@@ -184,10 +184,11 @@ export async function searchOverpassPlaces(
 export async function getOverpassPlaces(
   typeFilter?: string | null,
   location?: { latitude: number; longitude: number } | null,
+  radius?: number,
 ): Promise<OverpassResult[]> {
   if (isLocalhost()) return []
   const filters = typeFilter ? TYPE_TAGS[typeFilter] || [`["amenity"="${typeFilter}"]`] : ALL_TYPES.flatMap((t) => TYPE_TAGS[t])
-  const ql = buildQuery(filters, location)
+  const ql = buildQuery(filters, location, undefined, radius)
   return fetchOverpass(ql)
 }
 
