@@ -32,6 +32,16 @@ export default function PartyCreate() {
     )
   }
 
+  // Surface a clearer localized message for the common Supabase infrastructure
+  // failures (DB size cap, paused free-tier project, throttled writes). Raw
+  // envelope errors are confusing for users — they don't know they have to go
+  // restore a paused Supabase project to make a party work.
+  function humanizeError(raw: string | null | undefined): string {
+    const msg = (raw || '').toString()
+    if (/quota|exceeded|paused|suspend/i.test(msg)) return t('party_create.quota_error', lang)
+    return msg || t('party_create.failed', lang)
+  }
+
   const handleSubmit = async () => {
     if (!name.trim()) { setError(t('party_create.required_name', lang)); return }
     if (!startDate || !endDate) { setError(t('party_create.required_times', lang)); return }
@@ -45,7 +55,7 @@ export default function PartyCreate() {
       checkPartyAchievements(result.party.id, userName, userName)
       navigate(`/party/${result.party.id}`)
     } else {
-      setError(result.error || t('party_create.failed', lang))
+      setError(humanizeError(result.error))
     }
   }
 
