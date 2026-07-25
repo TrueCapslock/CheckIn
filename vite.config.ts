@@ -325,7 +325,7 @@ export default defineConfig({
     basicSsl(),
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png', 'splash.png'],
       manifest: {
         name: 'CheckIn',

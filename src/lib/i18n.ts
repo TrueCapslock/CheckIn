@@ -62,6 +62,14 @@ const translations: Translations = {
     'feed.mark_all_read': 'Mark all as read',
     'feed.no_messages': 'No new messages.',
 
+    'update.available_title': 'A new version is ready',
+    'update.available_desc': 'Reload to pick up the latest improvements.',
+    'update.reload': 'Reload',
+    'update.later': 'Later',
+    'update.offline_ready_title': 'Ready offline',
+    'update.offline_ready_desc': 'The app is cached and ready to work offline.',
+    'update.dismiss': 'Got it',
+
     'places.title': 'Places',
     'places.description': 'Discover and check in to nearby places.',
     'places.search': 'Search places...',
@@ -481,6 +489,14 @@ const translations: Translations = {
     'feed.new_count': '{count} nye',
     'feed.mark_all_read': 'Merk alle som lest',
     'feed.no_messages': 'Ingen nye meldinger.',
+
+    'update.available_title': 'En ny versjon er klar',
+    'update.available_desc': 'Last inn på nytt for å få de siste forbedringene.',
+    'update.reload': 'Last inn på nytt',
+    'update.later': 'Senere',
+    'update.offline_ready_title': 'Klar offline',
+    'update.offline_ready_desc': 'Appen er mellomlagret og klar til bruk offline.',
+    'update.dismiss': 'Ok',
 
     'places.title': 'Steder',
     'places.description': 'Oppdag og sjekk inn på steder i nærheten.',
