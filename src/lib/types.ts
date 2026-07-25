@@ -68,3 +68,23 @@ export interface Rating {
   comment: string | null
   created_at: string
 }
+
+/**
+ * In-app message shown in a user's inbox (currently only the "X checked in at Y"
+ * variant). The recipient is the follower; from_user_name is the actor.
+ *
+ * `id` is filled in by Supabase on read — leave it empty when constructing a
+ * row to insert. `read_at` is null until the user marks the message read.
+ */
+export interface Message {
+  id: string
+  recipient_email: string
+  from_user_name: string
+  type: string // 'check_in' for now; extensible for future event types
+  place_id: string | null
+  check_in_id: string | null
+  preview: string
+  read_at: string | null
+  created_at: string
+}
+

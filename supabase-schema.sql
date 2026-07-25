@@ -361,3 +361,47 @@ CREATE POLICY "Anyone can delete ratings"
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON place_ratings TO anon;
 
+-- In-app messages — sent to a user when a friend (someone who follows them) checks in.
+-- Client-side fanout: createCheckIn() resolves the actor's followers and inserts
+-- one row per follower. RLS is permissive (anon key everywhere); recipient_email
+-- filters keep each user's inbox private at the application layer.
+CREATE TABLE IF NOT EXISTS messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_email text NOT NULL,
+  from_user_name text NOT NULL,
+  type text NOT NULL DEFAULT 'check_in',
+  place_id text REFERENCES places(id) ON DELETE CASCADE,
+  check_in_id uuid,
+  preview text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  read_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_created
+  ON messages (recipient_email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread
+  ON messages (recipient_email) WHERE read_at IS NULL;
+
+-- Idempotency: prevents duplicate fanout if the offline-check-in queue reconnects
+-- and drains the same row more than once. NULLs are distinct in Postgres, so the
+-- check-in id can be null for pre-online inserts without blocking real rows.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_recipient_checkin_unique
+  ON messages (recipient_email, check_in_id);
+
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can read messages"
+  ON messages FOR SELECT
+  USING (true);
+
+CREATE POLICY "Anyone can insert messages"
+  ON messages FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Anyone can update messages"
+  ON messages FOR UPDATE
+  USING (true)
+  WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE ON messages TO anon;
+

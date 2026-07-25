@@ -57,6 +57,10 @@ const translations: Translations = {
     'feed.no_party_checkins': 'No check-ins during this party',
     'feed.participant_by': 'by',
     'feed.checked_in': 'checked in',
+    'feed.messages': 'Messages',
+    'feed.new_count': '{count} new',
+    'feed.mark_all_read': 'Mark all as read',
+    'feed.no_messages': 'No new messages.',
 
     'places.title': 'Places',
     'places.description': 'Discover and check in to nearby places.',
@@ -473,6 +477,10 @@ const translations: Translations = {
     'feed.no_party_checkins': 'Ingen innsjekkinger under denne festen',
     'feed.participant_by': 'av',
     'feed.checked_in': 'sjekket inn',
+    'feed.messages': 'Meldinger',
+    'feed.new_count': '{count} nye',
+    'feed.mark_all_read': 'Merk alle som lest',
+    'feed.no_messages': 'Ingen nye meldinger.',
 
     'places.title': 'Steder',
     'places.description': 'Oppdag og sjekk inn på steder i nærheten.',

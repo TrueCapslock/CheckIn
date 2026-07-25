@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAllCheckIns, getPlace } from '../lib/places'
 import { getCategoryIcon } from '../lib/categories'
-import { getAvatar, fetchAvatarUrl, getUsername } from '../lib/user'
+import { getAvatar, fetchAvatarUrl, getUsername, getUser } from '../lib/user'
 import { getParties, getPartyLeaderboard } from '../lib/party'
 import type { PartyLeaderboardEntry } from '../lib/party'
-import type { CheckIn, Place, Party } from '../lib/types'
+import type { CheckIn, Message, Place, Party } from '../lib/types'
 import { usePartyEnabled } from '../lib/admin'
 import { parsePlaceAddress } from '../lib/address'
+import { getMessagesForUser, markAllMessagesRead } from '../lib/messages'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 
@@ -22,6 +23,8 @@ export default function Feed() {
   const [checkIns, setCheckIns] = useState<CheckInWithPlace[]>([])
   const [completedParties, setCompletedParties] = useState<Party[]>([])
   const [partyLeaderboards, setPartyLeaderboards] = useState<Record<string, PartyLeaderboardEntry[]>>({})
+  const [messages, setMessages] = useState<Message[]>([])
+  const [markingRead, setMarkingRead] = useState(false)
   const [loading, setLoading] = useState(true)
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({})
 
@@ -65,7 +68,32 @@ export default function Feed() {
       }
       setLoading(false)
     })
-  }, [])
+
+    // Load the inbox. Best-effort — fails offline, the list just stays empty.
+    const user = getUser()
+    if (user?.email) {
+      getMessagesForUser(user.email).then(setMessages).catch(() => {})
+    }
+  }, [partyEnabled])
+
+  const handleMarkAllRead = useCallback(async () => {
+    const user = getUser()
+    if (!user?.email || markingRead) return
+    setMarkingRead(true)
+    const now = new Date().toISOString()
+    // Optimistic local update so the UI feels instant.
+    setMessages((curr) => curr.map((m) => (m.read_at ? m : { ...m, read_at: now })))
+    try {
+      await markAllMessagesRead(user.email)
+    } catch {
+      /* offline — keep optimistic state, badge will re-sync on next poll */
+    }
+    // Tell the Layout badge to drop to zero right away.
+    window.dispatchEvent(new CustomEvent('checkin:messages-read'))
+    setMarkingRead(false)
+  }, [markingRead])
+
+  const unreadCount = messages.filter((m) => !m.read_at).length
 
   return (
     <div className="flex flex-col h-full">
@@ -79,6 +107,74 @@ export default function Feed() {
       </div>
 
       <div className="flex-1 px-4 pb-20 overflow-y-auto">
+        {messages.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h2 className="text-sm font-semibold dark:text-white flex items-center gap-2">
+                <span aria-hidden="true">📩</span>
+                <span>{t('feed.messages', lang)}</span>
+                {unreadCount > 0 && (
+                  <span className="ml-1 text-xs font-bold text-blue-600 dark:text-blue-400">
+                    {t('feed.new_count', lang).replace('{count}', String(unreadCount))}
+                  </span>
+                )}
+              </h2>
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  disabled={markingRead}
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 disabled:opacity-50"
+                >
+                  {t('feed.mark_all_read', lang)}
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {messages.slice(0, 20).map((m) => {
+                const isUnread = !m.read_at
+                const target = m.place_id ? `/places/${m.place_id}` : '/feed'
+                return (
+                  <Link
+                    key={m.id}
+                    to={target}
+                    className={`block p-3 bg-white dark:bg-gray-900 rounded-xl border ${
+                      isUnread
+                        ? 'border-blue-300 dark:border-blue-700'
+                        : 'border-gray-200 dark:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {isUnread && (
+                        <span
+                          aria-hidden="true"
+                          className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1 text-sm">
+                        <div
+                          className={
+                            isUnread
+                              ? 'font-semibold dark:text-white'
+                              : 'text-gray-600 dark:text-gray-400'
+                          }
+                        >
+                          {m.preview}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {new Date(m.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (

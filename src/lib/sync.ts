@@ -1,3 +1,5 @@
+import { sendCheckInMessage } from './messages'
+
 const QUEUE_KEY = 'checkin_offline_queue'
 const STORE_QUEUE_KEY = 'checkin_store_queue'
 const MAX_RETRIES = 10
@@ -59,17 +61,20 @@ export async function processQueue(): Promise<{ ok: number; fail: number }> {
   for (const item of queue) {
     try {
       const { supabase } = await import('./supabase')
-      const { error } = await supabase.from('check_ins').insert({
+      const { data: insertData, error } = await supabase.from('check_ins').insert({
         place_id: item.placeId,
         user_name: item.userName,
         created_at: item.timestamp,
-      })
+      }).select('id').single()
       if (error) {
         console.warn('Sync failed for', item.id, error.message)
         fail++
       } else {
         removeFromQueue(item.id)
         ok++
+        // After successful offline sync, notify followers.
+        // sendCheckInMessage swallows its own errors, so we don't need a catch.
+        void sendCheckInMessage(item.userName, item.placeId, insertData?.id ?? null).catch(() => {})
       }
     } catch {
       fail++

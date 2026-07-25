@@ -13,6 +13,7 @@ import { parsePlaceAddress } from './address'
 import { getDistance } from './location'
 import { getMaxCheckInDistance } from './admin'
 import { getTodayLocal, isoToLocalDate } from './date'
+import { sendCheckInMessage } from './messages'
 
 const inFlight = new Map<string, Promise<unknown>>()
 
@@ -564,6 +565,9 @@ export async function createCheckIn(placeId: string, userName = 'You', userLocat
         if (error) throw error
 
         const result = await award(place, bonus)
+        // Fire-and-forget fanout to my followers. Never blocks the success return;
+        // sendCheckInMessage swallows all errors internally.
+        void sendCheckInMessage(myName, placeId, insertData?.id ?? null, place?.name).catch(() => {})
         return { ok: true, checkInId: insertData?.id, ...result }
       }
     } catch (e) {
@@ -592,8 +596,12 @@ export async function createCheckIn(placeId: string, userName = 'You', userLocat
 
   if (place && bonus) {
     const result = await award(place, bonus)
+    // Same fanout in the local-mock path so a user with no Supabase still
+    // triggers message creation once Supabase comes back.
+    void sendCheckInMessage(myName, placeId, mockId, place?.name).catch(() => {})
     return { ok: true, checkInId: mockId, ...result }
   }
 
+  void sendCheckInMessage(myName, placeId, mockId, place?.name).catch(() => {})
   return { ok: true, checkInId: mockId }
 }

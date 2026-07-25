@@ -67,3 +67,26 @@ export async function loadFollowsFromDb(): Promise<void> {
     console.warn('Follow load failed:', e)
   }
 }
+
+/**
+ * Reverse lookup: emails of users who follow `followedName`.
+ * Used by the message fanout so `Bob's` check-in sends a row to every email in
+ * `select follower_email from follows where followed_name = 'Bob'`.
+ * Returns [] when Supabase is unreachable or there are no followers.
+ */
+export async function getFollowerEmails(followedName: string): Promise<string[]> {
+  if (!followedName) return []
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('follower_email')
+      .eq('followed_name', followedName.trim())
+    if (error) throw error
+    return (data || [])
+      .map((r) => (r.follower_email || '').trim().toLowerCase())
+      .filter((e): e is string => !!e)
+  } catch {
+    return []
+  }
+}
+

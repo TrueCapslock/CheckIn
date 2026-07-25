@@ -2,6 +2,12 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { getPendingInviteCount } from '../lib/party'
 import { usePartyEnabled } from '../lib/admin'
+import { getUser } from '../lib/user'
+import {
+  getUnreadMessageCount,
+  readLastUnreadMessageCount,
+  writeLastUnreadMessageCount,
+} from '../lib/messages'
 import { useLanguage } from '../lib/language-context'
 import { t } from '../lib/i18n'
 import PullToRefresh from './PullToRefresh'
@@ -84,8 +90,18 @@ function NavIcon({ icon }: { icon: TabIcon }) {
   }
 }
 
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full px-1 z-10">
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
 export default function Layout() {
   const [inviteCount, setInviteCount] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
   const partyEnabled = usePartyEnabled()
   const { lang } = useLanguage()
 
@@ -93,6 +109,28 @@ export default function Layout() {
     setInviteCount(getPendingInviteCount())
     const interval = setInterval(() => setInviteCount(getPendingInviteCount()), 10000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Poll unread message count and cache the last known value to localStorage so the
+  // badge doesn't briefly flash from N → 0 → N on a slow network mount.
+  useEffect(() => {
+    const u = getUser()
+    if (u?.email) setUnreadMessages(readLastUnreadMessageCount(u.email))
+    const refresh = async () => {
+      const email = u?.email
+      if (!email) return
+      const count = await getUnreadMessageCount(email)
+      setUnreadMessages(count)
+      writeLastUnreadMessageCount(email, count)
+    }
+    refresh()
+    const interval = setInterval(refresh, 10000)
+    const handleRead = () => refresh()
+    window.addEventListener('checkin:messages-read', handleRead as EventListener)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('checkin:messages-read', handleRead as EventListener)
+    }
   }, [])
 
   return (
@@ -112,28 +150,29 @@ export default function Layout() {
       {/* Bottom nav: full bleed on iPad+ (no floating lift, no width cap).
           At sm, mirrors the shell — a centered card with a rounded bottom. */}
       <nav className="app-bottom-nav fixed bottom-0 inset-x-0 z-30 flex w-full border-t px-3 pb-1 pt-1 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:max-w-md sm:rounded-b-[2rem] md:left-0 md:translate-x-0 md:max-w-full md:rounded-b-none">
-        {tabs.map((tab) => (
-          <NavLink
-            key={tab.label}
-            to={tab.to}
-            end={tab.to === '/'}
-            className={({ isActive }) =>
-              `app-nav-item ${tab.center ? 'app-nav-center' : ''} flex-1 py-0.5 text-center text-[10px] font-semibold transition-all ${
-                isActive ? 'app-nav-item-active' : ''
-              }`
-            }
-          >
-            <div className="app-nav-icon relative flex items-center justify-center leading-none">
-              {tab.label === 'nav.profile' && inviteCount > 0 && partyEnabled && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[9px] font-bold rounded-full px-1 z-10">
-                  {inviteCount}
-                </span>
-              )}
-              <NavIcon icon={tab.icon as TabIcon} />
-            </div>
-            {t(tab.label, lang)}
-          </NavLink>
-        ))}
+        {tabs.map((tab) => {
+          const inviteBadge = tab.label === 'nav.profile' && partyEnabled
+          const messagesBadge = tab.label === 'nav.feed'
+          return (
+            <NavLink
+              key={tab.label}
+              to={tab.to}
+              end={tab.to === '/'}
+              className={({ isActive }) =>
+                `app-nav-item ${tab.center ? 'app-nav-center' : ''} flex-1 py-0.5 text-center text-[10px] font-semibold transition-all ${
+                  isActive ? 'app-nav-item-active' : ''
+                }`
+              }
+            >
+              <div className="app-nav-icon relative flex items-center justify-center leading-none">
+                {inviteBadge && <NavBadge count={inviteCount} />}
+                {messagesBadge && <NavBadge count={unreadMessages} />}
+                <NavIcon icon={tab.icon as TabIcon} />
+              </div>
+              {t(tab.label, lang)}
+            </NavLink>
+          )
+        })}
       </nav>
     </div>
   )
