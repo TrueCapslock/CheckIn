@@ -8,7 +8,6 @@ import { getCachedPlaces, refreshPlaces, searchPlaces } from '../lib/places'
 import { useUserLocation, getDistance, formatDistance } from '../lib/location'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
-import PlaceMap from '../components/PlaceMap'
 import PlaceAddMap from '../components/PlaceAddMap'
 
 const PLACE_ITEM_HEIGHT = 104
@@ -68,7 +67,7 @@ export default function Places() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [view, setView] = useState<'list' | 'map' | 'add'>('list')
+  const [view, setView] = useState<'list' | 'add'>('list')
   const [sort, setSort] = useState<'name' | 'distance'>('distance')
   const [fetchError, setFetchError] = useState<string | null>(null)
   const { location, loading: locLoading } = useUserLocation()
@@ -174,14 +173,6 @@ export default function Places() {
             {t('places.list', lang)}
           </button>
           <button
-            onClick={() => setView('map')}
-            className={`flex-1 py-1.5 text-sm font-medium rounded-md ${
-              view === 'map' ? 'bg-[var(--ci-panel-strong)] shadow-sm' : ''
-            }`}
-          >
-            {t('places.map', lang)}
-          </button>
-          <button
             onClick={() => setView('add')}
             className={`flex-1 py-1.5 text-sm font-medium rounded-md ${
               view === 'add' ? 'bg-[var(--ci-panel-strong)] shadow-sm' : ''
@@ -214,12 +205,6 @@ export default function Places() {
       {loading ? (
         <div className="flex-1 flex items-center justify-center mt-20">
           <div className="w-8 h-8 border-4 border-gray-200 dark:border-gray-700 border-t-blue-600 rounded-full animate-spin" />
-        </div>
-      ) : view === 'map' ? (
-        <div className="relative flex-1 min-h-0">
-          <div className="absolute inset-0 overflow-hidden border border-gray-200 dark:border-gray-700">
-            <PlaceMap places={sortedPlaces} userLocation={location} />
-          </div>
         </div>
       ) : view === 'add' ? (
         <PlaceAddMap onPlaceAdded={() => { refreshPlaces(filter, location).then(setPlaces) }} />
