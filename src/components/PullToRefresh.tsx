@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 
-const THRESHOLD = 70
+const THRESHOLD = 90
 
 export default function PullToRefresh() {
   const { lang } = useLanguage()
@@ -64,7 +64,7 @@ export default function PullToRefresh() {
 
   return (
     <div className="fixed left-0 right-0 top-0 z-50 flex items-center justify-center pointer-events-none" style={{ height: Math.min(progress, 80) }}>
-      <span className={`text-sm font-medium transition-colors ${state === 'ready' ? 'text-blue-500' : 'text-gray-400'}`}>
+      <span className={`text-sm font-semibold transition-colors ${state === 'ready' ? 'text-emerald-500' : 'text-gray-400'}`}>
         {state === 'ready' ? t('pull_to_refresh.release', lang) : t('pull_to_refresh.pull', lang)}
       </span>
     </div>

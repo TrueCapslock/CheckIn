@@ -246,7 +246,7 @@ const translations: Translations = {
     'about.description': 'CheckIn helps you discover nearby places, check in when you visit, earn points and coins, collect achievements, upgrade multipliers, and follow friends.',
     'about.version': 'Version',
     'about.tip_title': 'Pro tip',
-    'about.tip_refresh_drag': 'Drag down from the top of the page to refresh. Release when the hint turns blue to reload — useful when new check-ins haven’t appeared yet.',
+    'about.tip_refresh_drag': 'Drag down from the top of the page to refresh. Release when the hint turns green to reload — useful when new check-ins haven’t appeared yet.',
 
     'user_profile.not_found': 'User not found.',
     'user_profile.back': '← Back',
@@ -676,7 +676,7 @@ const translations: Translations = {
     'about.description': 'CheckIn hjelper deg med å oppdage steder i nærheten, sjekke inn når du besøker, tjene poeng og mynter, samle prestasjoner, oppgradere multiplikatorer og følge venner.',
     'about.version': 'Versjon',
     'about.tip_title': 'Tips',
-    'about.tip_refresh_drag': 'Dra nedover fra toppen av siden for å oppdatere. Slipp når hintet blir blått for å laste på nytt — nyttig når nye innsjekkinger ennå ikke har dukket opp.',
+    'about.tip_refresh_drag': 'Dra nedover fra toppen av siden for å oppdatere. Slipp når hintet blir grønt for å laste på nytt — nyttig når nye innsjekkinger ennå ikke har dukket opp.',
 
     'user_profile.not_found': 'Fant ikke brukeren.',
     'user_profile.back': '← Tilbake',
