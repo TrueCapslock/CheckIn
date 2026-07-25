@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { setUser } from '../lib/user'
-import { sendVerificationCode, verifyCode } from '../lib/auth'
+import { sendVerificationCode, verifyCode, isInstantAuthEmail } from '../lib/auth'
 import type { StoredUser } from '../lib/auth'
 import {
   lookupUserByEmail,
@@ -48,6 +48,28 @@ export default function UsernamePrompt({ onDone }: Props) {
     setStep('done')
   }
 
+  const autoRegisterAndDone = async (trimmedEmail: string) => {
+    const fallbackName = trimmedEmail.split('@')[0] || 'User'
+    setSending(true)
+    setError('')
+    const ok = await registerUser(fallbackName, trimmedEmail)
+    if (!ok) {
+      const existing2 = await lookupUserByEmail(trimmedEmail)
+      setSending(false)
+      if (existing2) {
+        loadExistingProfile(existing2, trimmedEmail)
+        return
+      }
+      setError('Failed to save profile. Try again.')
+      return
+    }
+    setUser(fallbackName, trimmedEmail)
+    setSending(false)
+    setName(fallbackName)
+    setIsReturning(false)
+    setStep('done')
+  }
+
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedEmail = email.trim().toLowerCase()
@@ -56,8 +78,17 @@ export default function UsernamePrompt({ onDone }: Props) {
     setSending(true)
     setError('')
 
-    // Check if this email already has an account before sending code
     const existing = await lookupUserByEmail(trimmedEmail)
+
+    if (isInstantAuthEmail(trimmedEmail)) {
+      setSending(false)
+      if (existing) {
+        loadExistingProfile(existing, trimmedEmail)
+        return
+      }
+      await autoRegisterAndDone(trimmedEmail)
+      return
+    }
 
     const result = await sendVerificationCode(trimmedEmail)
     setSending(false)
@@ -70,7 +101,6 @@ export default function UsernamePrompt({ onDone }: Props) {
     setIsReturning(!!existing)
     setStep('code')
   }
-
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmedCode = code.trim()

@@ -7,6 +7,31 @@ export interface StoredUser {
   achievements?: Record<string, unknown>
 }
 
+// Emails that are allowed to skip the code-entry step entirely. The owner
+// adds their own inbox here so testing the full app flow doesn't require
+// intercepting the verification email in dev tooling.
+//
+// SECURITY NOTE: this only short-circuits on the CLIENT. The server-side
+// /api/auth/send-code and /api/auth/verify-code endpoints still enforce the
+// HMAC-signed token + email ownership rules, so a network attacker who
+// impersonates the email address still has to actually own the inbox.
+export const INSTANT_AUTH_EMAILS: ReadonlySet<string> = new Set([
+  'rune.glad@gmail.com',
+])
+
+function norm(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+/**
+ * True iff `email` (after trim+lowercase) is on the instant-auth allowlist.
+ * Truthy but unsafe inputs (null/undefined/non-string) return false.
+ */
+export function isInstantAuthEmail(email: unknown): boolean {
+  if (typeof email !== 'string') return false
+  return INSTANT_AUTH_EMAILS.has(norm(email))
+}
+
 export async function sendVerificationCode(email: string, name?: string): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   const trimmedEmail = email.trim()
   try {
