@@ -195,18 +195,33 @@ export function useSticker(type: string): number {
 /* ───── Mayor (computed from check-in data) ───── */
 
 export function getMayorFromCheckIns(allCheckIns: CheckIn[], placeId: string): string | null {
-  const counts: Record<string, number> = {}
+  // Track per-user count + the timestamp of their earliest check-in at this
+  // place. The mayor is the user with the most check-ins; when two users are
+  // tied, the one whose first check-in was earlier wins ("first to reach the
+  // most"). This prevents the throne from passing back and forth every time
+  // a challenger racks up a new check-in after the leader.
+  const stats: Record<string, { count: number; firstAt: string }> = {}
   for (const ci of allCheckIns) {
-    if (ci.place_id === placeId) {
-      counts[ci.user_name] = (counts[ci.user_name] || 0) + 1
+    if (ci.place_id !== placeId) continue
+    const cur = stats[ci.user_name]
+    if (!cur) {
+      stats[ci.user_name] = { count: 1, firstAt: ci.created_at }
+    } else {
+      cur.count++
+      if (ci.created_at < cur.firstAt) cur.firstAt = ci.created_at
     }
   }
   let top: string | null = null
   let topCount = 0
-  for (const [name, count] of Object.entries(counts)) {
-    if (count > topCount) {
-      topCount = count
+  let topFirstAt = ''
+  for (const [name, s] of Object.entries(stats)) {
+    if (
+      s.count > topCount ||
+      (s.count === topCount && top !== null && s.firstAt < topFirstAt)
+    ) {
       top = name
+      topCount = s.count
+      topFirstAt = s.firstAt
     }
   }
   return top
