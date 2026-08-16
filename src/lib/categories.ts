@@ -8,8 +8,8 @@ export interface Category {
   google_query: string
 }
 
-const CACHE_KEY = 'checkin_categories_v2'
-const CACHE_TIME_KEY = 'checkin_categories_ts_v2'
+const CACHE_KEY = 'checkin_categories_v3'
+const CACHE_TIME_KEY = 'checkin_categories_ts_v3'
 const CACHE_TTL = 1000 * 60 * 60 // 1 hour
 
 const FALLBACK_CATEGORIES: Category[] = [
