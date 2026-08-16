@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { t } from '../lib/i18n'
 import { useLanguage } from '../lib/language-context'
 import type { Party, PartyMember } from '../lib/types'
-import { getParties, getPartyMembers, getPartyLeaderboard, endParty, leaveParty, respondToInvitation, inviteToParty } from '../lib/party'
+import { getParties, getPartyMembers, getPartyLeaderboard, endParty, leaveParty, deleteParty, respondToInvitation, inviteToParty } from '../lib/party'
 import type { PartyLeaderboardEntry } from '../lib/party'
 import { getUsername } from '../lib/user'
 import { getFollowing } from '../lib/follow'
@@ -80,6 +80,13 @@ export default function PartyDetail() {
     if (!id) return
     await leaveParty(id)
     navigate('/profile')
+  }
+
+  const handleDeleteParty = async () => {
+    if (!id) return
+    if (!window.confirm(t('party_detail.delete_confirm', lang))) return
+    const ok = await deleteParty(id)
+    if (ok) navigate('/profile')
   }
 
   const toggleInvite = (name: string) => {
@@ -323,6 +330,14 @@ export default function PartyDetail() {
               className="flex-1 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium active:scale-95"
             >
               {t('party_detail.leave_party', lang)}
+            </button>
+          )}
+          {isCreator && (
+            <button
+              onClick={handleDeleteParty}
+              className="flex-1 py-2.5 bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium active:scale-95"
+            >
+              {t('party_detail.delete_party', lang)}
             </button>
           )}
         </div>

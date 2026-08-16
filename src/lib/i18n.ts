@@ -292,6 +292,8 @@ const translations: Translations = {
     'party_detail.no_checkins_yet': 'No check-ins yet during this party',
     'party_detail.end_party': 'End Party',
     'party_detail.leave_party': 'Leave Party',
+    'party_detail.delete_party': 'Delete Party',
+    'party_detail.delete_confirm': 'Delete this party? This cannot be undone.',
 
     'party_invites.title': 'Invitations',
     'party_invites.empty': 'No pending invitations',
@@ -723,6 +725,8 @@ const translations: Translations = {
     'party_detail.no_checkins_yet': 'Ingen innsjekkinger ennå under denne festen',
     'party_detail.end_party': 'Avslutt fest',
     'party_detail.leave_party': 'Forlat fest',
+    'party_detail.delete_party': 'Slett fest',
+    'party_detail.delete_confirm': 'Slette denne festen? Dette kan ikke angres.',
 
     'party_invites.title': 'Invitasjoner',
     'party_invites.empty': 'Ingen ventende invitasjoner',

@@ -41,7 +41,7 @@ export async function createParty(
   const user = getUser()
   const createdBy = getUsername() || user?.email || 'Anonymous'
   try {
-    const res = await partyApi('POST', { name, created_by: createdBy, starts_at: startsAt, ends_at: endsAt, invitees })
+    const res = await partyApi('POST', { id: crypto.randomUUID(), name, created_by: createdBy, starts_at: startsAt, ends_at: endsAt, invitees })
     const data = await res.json()
     if (!res.ok) return { ok: false, error: data.error }
     if (data.party) {
@@ -123,6 +123,19 @@ export async function leaveParty(partyId: string): Promise<boolean> {
   if (!userName) return false
   try {
     const res = await partyApi('DELETE', { party_id: partyId, user_name: userName })
+    return (await res.json()).ok === true
+  } catch {
+    return false
+  }
+}
+
+/* ───── Delete party (creator only) ───── */
+
+export async function deleteParty(partyId: string): Promise<boolean> {
+  const user = getUser()
+  const userName = getUsername() || user?.email || 'Anonymous'
+  try {
+    const res = await partyApi('DELETE', { party_id: partyId, user_name: userName, delete_party: true })
     return (await res.json()).ok === true
   } catch {
     return false
