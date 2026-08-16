@@ -308,7 +308,8 @@ INSERT INTO categories (id, name, icon, sort_order, google_query) VALUES
   ('club', 'Club', '🎵', 4, 'night clubs'),
   ('lounge', 'Lounge', '🥂', 5, 'lounges'),
   ('park', 'Park', '🌳', 6, 'parks'),
-  ('things_to_do', 'Things to Do', '🎪', 7, 'things to do')
+  ('hotel', 'Hotel', '🏨', 7, 'hotels'),
+  ('things_to_do', 'Things to Do', '🎪', 8, 'things to do')
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed places (Portland, OR area)

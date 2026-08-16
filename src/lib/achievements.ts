@@ -31,11 +31,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'hotel_5', title: 'Hotel Hopper', description: 'Visit 5 unique hotels', icon: '🛏️', coins: 100 },
   { id: 'hotel_10', title: 'Roamer', description: 'Visit 10 unique hotels', icon: '🧳', coins: 200 },
   { id: 'hotel_25', title: 'Hotel Tycoon', description: 'Visit 25 unique hotels', icon: '🛎️', coins: 500 },
-  { id: 'first_city', title: 'Explorer', description: 'Visit your first city', icon: '🏙️', coins: 25 },
+  { id: 'first_city', title: 'Explorer', description: 'Check in at your second city', icon: '🏙️', coins: 25 },
   { id: 'city_5', title: 'Traveler', description: 'Visit 5 unique cities', icon: '🗺️', coins: 100 },
   { id: 'city_10', title: 'Globetrotter', description: 'Visit 10 unique cities', icon: '🌎', coins: 200 },
   { id: 'city_25', title: 'World Citizen', description: 'Visit 25 unique cities', icon: '🌍', coins: 500 },
-  { id: 'first_country', title: 'First Border', description: 'Visit your first country', icon: '🌍', coins: 50 },
+  { id: 'first_county', title: 'County Explorer', description: 'Check in at your second county', icon: '🧭', coins: 25 },
+  { id: 'first_country', title: 'First Border', description: 'Cross your first border — check in at a second country', icon: '🌍', coins: 50 },
   { id: 'country_5', title: 'Continental', description: 'Visit 5 unique countries', icon: '🛂', coins: 100 },
   { id: 'country_10', title: 'International', description: 'Visit 10 unique countries', icon: '✈️', coins: 200 },
   { id: 'country_25', title: 'Globe Trotter', description: 'Visit 25 unique countries', icon: '🌐', coins: 500 },
@@ -249,14 +250,15 @@ export async function checkAchievements(placeId: string, placeType: string, user
   if (count >= 50) unlock('checkins_50')
   if (count >= 100) unlock('checkins_100')
 
-  // ── City & country milestones ──
+  // ── City, county & country milestones ──
   // Look up each Place once (prefer local cache to avoid hammering Supabase) and
-  // parse city/country from its Nominatim-style address. Count unique values
+  // parse city/county/country from its Nominatim-style address. Count unique values
   // across all of the user's check-ins plus the current place.
   // For hotels, count unique place_ids (not unique names) — re-visiting the same
   // hotel should not advance the tier; each hotel is one unit of progress.
   const uniquePlaceIds = Array.from(new Set([...mine.map((ci) => ci.place_id), placeId]))
   const cities = new Set<string>()
+  const counties = new Set<string>()
   const countries = new Set<string>()
   const hotelPlaces = new Set<string>()
 
@@ -266,18 +268,24 @@ export async function checkAchievements(placeId: string, placeType: string, user
       try { place = await getPlace(pid) } catch { /* keep null */ }
     }
     if (!place?.address) continue
-    const { city, country } = parsePlaceAddress(place.address)
+    const { city, county, country } = parsePlaceAddress(place.address)
     if (city) cities.add(city)
+    if (county) counties.add(county)
     if (country) countries.add(country)
     if (place.type === 'hotel') hotelPlaces.add(pid)
   }
 
-  if (cities.size >= 1) unlock('first_city')
+  // The "first" region badges unlock on the SECOND unique region, not the first:
+  // the first city/county/country is the user's home turf, so it doesn't count as
+  // exploring a city or crossing a border.
+  if (cities.size >= 2) unlock('first_city')
   if (cities.size >= 5) unlock('city_5')
   if (cities.size >= 10) unlock('city_10')
   if (cities.size >= 25) unlock('city_25')
 
-  if (countries.size >= 1) unlock('first_country')
+  if (counties.size >= 2) unlock('first_county')
+
+  if (countries.size >= 2) unlock('first_country')
   if (countries.size >= 5) unlock('country_5')
   if (countries.size >= 10) unlock('country_10')
   if (countries.size >= 25) unlock('country_25')
